@@ -52,7 +52,7 @@ Princípios:
 
 ## Como funciona
 
-1. Às 07:00, de segunda a sábado, o sistema coleta os e-mails recebidos desde o último relatório, ignorando spam e promoções.
+1. Às 08:00, de segunda a sábado, o sistema coleta os e-mails recebidos desde o último relatório, ignorando spam e promoções.
 2. Carrega o quadro salvo e o que você marcou como feito, seja pelo Telegram ou por respostas enviadas.
 3. Envia os e-mails resumidos ao Claude, que devolve tarefas novas, prioridades e rascunhos de resposta.
 4. Atualiza o quadro no banco SQLite e manda o relatório pelo bot do Telegram.

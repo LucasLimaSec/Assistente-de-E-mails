@@ -12,7 +12,7 @@ Princípios: custo mínimo (Claude Haiku 5.5 pela API, centavos por mês), leitu
 
 Uma execução por dia, em sete etapas. As etapas 2 a 6 rodam em sequência; a 7 roda o dia todo, em paralelo.
 
-1. **Disparo**: agendador inicia o script no horário definido (ex.: 07:00, America/Sao\_Paulo).
+1. **Disparo**: agendador inicia o script no horário definido (08:00, America/Sao\_Paulo).
 2. **Coleta**: busca e-mails recebidos desde o último relatório (24 h; na segunda, desde o relatório de sábado), ignorando spam, promoções e remetentes da lista de exclusão.
 3. **Memória de ontem**: carrega o quadro Kanban salvo, os e-mails enviados ontem e as tarefas marcadas como feitas pelo Telegram.
 4. **Análise com IA**: envia ao Claude Haiku 5.5 os e-mails resumidos (remetente, assunto e corpo truncado) + quadro atual; recebe de volta um JSON com tarefas novas, prioridades, rascunhos de resposta e tarefas que viraram "feitas".
@@ -30,8 +30,8 @@ Python com bibliotecas oficiais. Só a IA tem custo, estimado em centavos por m�
 | --- | --- | --- |
 | Linguagem | Python 3.12 | Bom suporte a todas as APIs abaixo |
 | E-mail | Modular: lista de `contas` no config.yaml, cada uma com seu `tipo` | Gmail por IMAP + senha de app (primeira conta: Gmail pessoal); Outlook e corporativo por OAuth (`outlook_oauth`) depois |
-| IA | API do Claude, modelo Haiku 5.5 (claude-haiku-5-5) | SDK oficial anthropic; chave criada no Claude Console; saída em JSON |
-| IA local&#32; | Ollama + modelo pequeno (ex.: qwen3.5:4b) | Desligado por padrão; reserva se a API falhar ou para e-mails sensíveis. Exige \~4–7 GB de RAM livres no servidor |
+| IA | Três provedores trocáveis: `ollama` (padrão por enquanto), `regras` (reserva, sem IA) e `claude` (API, quando houver crédito) | Ver seção 13 |
+| IA local&#32; | Ollama + modelo pequeno (ex.: qwen3.5:4b) em container no servidor | Padrão por enquanto, em lotes de madrugada (seção 13). Depois pode apontar para o Ollama do PC de mesa |
 | Áudio&#32; | Piper (TTS local) + ffmpeg | Gera o resumo em voz e converte para OGG/Opus, formato das mensagens de voz do Telegram; leve, roda na CPU |
 | Mensagens | Bot do Telegram (python-telegram-bot) | Mensagem em HTML para negrito e emojis |
 | Memória | SQLite | Arquivo em `data/`, montado como volume do container |
@@ -67,14 +67,14 @@ O código nunca chama a API do Claude diretamente: tudo passa por uma interface 
 
 ```yaml
 llm:
-  provider: claude          # claude | ollama
-  fallback: none            # none | ollama
+  provider: ollama          # regras | ollama | claude
+  fallback: regras          # none | regras | ollama
   local_only_domains: []    # ex.: ["empresa.com.br"]
 audio:
   enabled: false            # true = envia o resumo também como voz
 ```
 
-O modelo local é mais lento e erra mais em português que o Haiku 5.5; serve como reserva e para privacidade, não como padrão.
+O modelo local é mais lento e erra mais em português que o Haiku 5.5. É o padrão por enquanto só porque não tem custo (seção 13); quando houver crédito, o Claude volta a ser a melhor opção.
 
 ## 4. Memória: o que foi feito ontem
 
@@ -149,8 +149,9 @@ assistente-email/
 │   ├── ai_analyzer.py   # prompt + validação do JSON + log de tokens
 │   ├── llm/
 │   │   ├── base.py      # interface única: analisar(emails, quadro) → JSON
-│   │   ├── claude.py    # provedor padrão (Haiku 5.5)
-│   │   └── ollama.py    # provedor local opcional (Fase 8)
+│   │   ├── regras.py    # provedor sem IA (reserva)
+│   │   ├── ollama.py    # provedor local (padrão por enquanto)
+│   │   └── claude.py    # provedor API (Haiku 5.5)
 │   ├── tts.py           # áudio opcional: Piper + ffmpeg (Fase 8)
 │   ├── kanban.py        # regras do quadro (mover, atrasar, deduplicar)
 │   ├── storage.py       # SQLite: tarefas, histórico, snapshots
@@ -170,12 +171,12 @@ Oito fases, cada uma entregue e testada antes da próxima. Peça ao Claude Code 
 | --- | --- | --- |
 | 1. Base | Estrutura de pastas, .env, config.yaml, storage.py com tabelas, container | `python main.py --check` valida as chaves e cria o banco |
 | 2. E-mail | email\_reader.py com filtros | Lista no terminal os e-mails das últimas 24 h, sem spam |
-| 3. IA | ai\_analyzer.py + interface de provedor (só Claude por enquanto) + prompt em arquivo | Com e-mails fictícios, retorna JSON válido com tarefas, prioridades e rascunhos, e registra os tokens usados |
+| 3. IA | ai\_analyzer.py + provedores `regras`, `ollama` e `claude` + container do Ollama + prompt em arquivo + `--benchmark-ia` | Com e-mails fictícios: o Ollama no servidor retorna JSON válido em lotes, no tempo medido pelo benchmark; `regras` sempre funciona; `claude` passa nos testes com a API simulada; tokens registrados |
 | 4. Kanban | kanban.py com regras da seção 5 | Testes cobrem mover, deduplicar e marcar atraso |
 | 5. Telegram (envio) | report.py + envio pelo bot | Relatório igual ao exemplo da seção 6 chega no celular |
 | 6. Telegram (comandos) | /feito, /nova, /quadro, /rascunho, nota livre, Google Agenda (iCal), resumo semanal | Comando altera o banco e aparece no relatório seguinte |
 | 7. Agendamento | Agendador no container + logs + aviso de falha | Roda sozinho 3 dias seguidos sem intervenção |
-| 8. Extras | Provedor Ollama + áudio do resumo (tts.py) | Trocar llm.provider no config.yaml muda a IA sem mexer no código, e o resumo chega também como mensagem de voz |
+| 8. Extras | IA no PC de mesa (Ollama pela rede local ou Tailscale) + áudio do resumo (tts.py) | Trocar a URL ou o provedor no config.yaml muda a IA sem mexer no código, e o resumo chega também como mensagem de voz |
 
 Modo de teste: uma flag `--dry-run` imprime o relatório no terminal sem enviar nada nem alterar o banco.
 
@@ -200,7 +201,7 @@ Responda abaixo de cada pergunta (ou edite a seção correspondente). Marque a c
 
 - [x] Qual provedor de e-mail: Gmail, Outlook ou corporativo? Os tres. Uma conta com possibilidade para adicionar outras
 - [x] Onde o sistema vai rodar: Servidor linux ubuntu ligado 24h? (Os comandos do Telegram exigem algo ligado o dia todo.)
-- [x] Horário do relatório? 7hr Envia também nos fins de semana? não
+- [x] Horário do relatório? 7hr (alterado para 8hr em 30/10/2026, horário de entrada no trabalho) Envia também nos fins de semana? não
 
 **Conteúdo do relatório**
 
@@ -234,10 +235,29 @@ Você vai precisar criar manualmente: a chave da API do Claude (Claude Console; 
 
 - **Contas**: lista `contas` no config.yaml. A primeira é o Gmail pessoal, por IMAP com senha de app. Endereço e senha ficam no `.env` (o repositório é público). Outlook e corporativo entram depois com OAuth (`tipo: outlook_oauth`).
 - **Execução**: tudo em container Docker (docker-compose.yml), acompanhado pelo gerenciador de containers do servidor. O banco SQLite fica em `data/`, montado como volume.
-- **Dias**: relatório de segunda a sábado, às 07:00. O relatório de segunda cobre tudo desde o relatório de sábado, incluindo o restante do sábado até 23:59. O atraso conta 3 dias úteis, e dias úteis são os de `geral.dias_uteis` (seg a sáb).
+- **Dias**: relatório de segunda a sábado, às 08:00 (horário de entrada no trabalho). O relatório de segunda cobre tudo desde o relatório de sábado, incluindo o restante do sábado até 23:59. O atraso conta 3 dias úteis, e dias úteis são os de `geral.dias_uteis` (seg a sáb).
 - **Filtros**: `excluir_remetentes` (nunca entram), `incluir_sempre` (nunca são filtrados, ex.: sites de freelancer) e `vip` (sempre prioridade Alta), todas começando vazias.
 - **Rascunhos**: não aparecem no relatório. O comando `/rascunho N` mostra o rascunho da tarefa N.
 - **Resumo semanal**: sábado às 17:00, com as tarefas concluídas na semana, as pendentes, as mais atrasadas e o custo da IA na semana.
 - **Google Agenda**: lida pelo endereço secreto iCal (`GOOGLE_AGENDA_ICAL_URL`), sem OAuth.
 - **Várias contas**: um relatório único, com a conta marcada em cada item.
 - **E-mail da empresa**: confirmar a política antes de adicionar a conta. Se não puder sair do servidor, o domínio vai para `local_only_domains` e só é analisado com o Ollama (Fase 8).
+
+## 13. IA sem custo: modelo pequeno no servidor (30/10/2026)
+
+Sem crédito na API por enquanto. O servidor (i5 de 4ª geração, 8 GB de RAM, sem GPU) roda um modelo pequeno, com três provedores trocáveis pelo config.yaml:
+
+- **`ollama`** (padrão agora): container `ollama/ollama` no mesmo docker-compose, sem porta exposta para fora da rede interna dos containers. `mem_limit` de ~5 GB, um modelo carregado por vez, sem paralelismo, e `keep_alive` curto para liberar a RAM depois da análise.
+- **`regras`** (reserva): sem IA. Cada e-mail relevante vira tarefa "Responder" com o assunto, prioridade Alta para VIP e deduplicação pela conversa. Também cobre o que o modelo não terminar a tempo.
+- **`claude`** (futuro): Haiku 5.5 pela API, pronto e testado com a API simulada; liga com `provider: claude`.
+
+Como o modelo pequeno é lento e tem pouca memória, o fluxo muda:
+
+- **Análise de madrugada**: a análise começa às 05:30 (`llm.horario_analise`) e o relatório sai às 08:00. O que não ficar pronto até 07:55 vai pelo modo `regras`, assim como os e-mails que chegarem depois do início da análise (se der tempo, eles entram num lote extra antes do relatório).
+- **Swap**: o servidor tem 4 GB de swap (`/swap.img`), uma margem contra falta de memória. O benchmark deve confirmar que a análise não depende dele, porque swap deixa tudo muito mais lento.
+- **Lotes pequenos**: ~6 e-mails por chamada (`llm.lote_emails`), com contexto de 8 mil tokens (`num_ctx`). Isso limita a RAM e melhora a precisão do modelo pequeno.
+- **Pré-filtro por regras**: spam, promoções, excluídos e conversas já conhecidas não passam pelo modelo.
+- **Saída curta e estruturada**: o lote só classifica (tipo, prioridade, título curto, prazo), com JSON forçado pelo schema do Ollama (`format`). Saída inválida: uma nova tentativa, depois `regras`.
+- **Rascunhos sob demanda**: gerados só quando você pede `/rascunho N` (~1–2 min no servidor) e guardados no banco. Fica configurável (`llm.rascunhos: sob_demanda | lote`) para quando houver IA mais rápida.
+- **Benchmark antes de decidir**: `python main.py --benchmark-ia` roda os e-mails fictícios no servidor e mede tempo, RAM e acertos. O modelo e o tamanho do lote saem dessa medição.
+- **Futuro**: `llm.ollama.url` aponta hoje para o container (`http://ollama:11434`). Para usar o PC de mesa, basta trocar pela URL dele (rede local ou Tailscale, nunca exposta à internet). Pode virar uma lista em ordem de preferência: PC de mesa primeiro, servidor como reserva.

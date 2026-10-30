@@ -3,7 +3,7 @@
 
 geral:
   fuso_horario: America/Sao_Paulo
-  horario_relatorio: "07:00"
+  horario_relatorio: "08:00"
   # Dias com relatório. Também são os dias úteis usados para contar atraso.
   dias_uteis: [seg, ter, qua, qui, sex, sab]
   banco: data/assistente.db       # relativo à pasta deste arquivo
