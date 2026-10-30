@@ -161,6 +161,23 @@ def test_enviado_por_voce_e_spam():
     assert motivo_descarte(msg, "a@example.com", PROPRIO, {}, False) == "spam"
 
 
+@pytest.mark.parametrize("remetente, automatico", [
+    ("no-reply@example.com", True),
+    ("noreply-pt@freela.example.com", True),
+    ("jobalerts-noreply@rede.example.com", True),
+    ("do_not_reply@banco.example.com", True),
+    ("notificacoes@freela.example.com", True),
+    ("maria.souza@example.com", False),
+    ("norberto@example.com", False),
+])
+def test_remetentes_automaticos(remetente, automatico):
+    msg = email.message_from_string(f"From: {remetente}\nSubject: x\n\ncorpo", policy=policy.default)
+    esperado = "automático" if automatico else None
+    assert motivo_descarte(msg, remetente, PROPRIO, {}, False) == esperado
+    # incluir_sempre passa por cima
+    assert motivo_descarte(msg, remetente, PROPRIO, {"incluir_sempre": [remetente]}, False) is None
+
+
 @pytest.mark.parametrize("endereco, padroes, esperado", [
     ("x@mail.freela.example.com", ["@freela.example.com"], True),
     ("x@freela.example.com", ["@FREELA.example.com"], True),

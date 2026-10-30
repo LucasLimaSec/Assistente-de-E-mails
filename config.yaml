@@ -20,7 +20,9 @@ contas:
 filtros:
   # Endereços completos ("x@loja.com") ou domínios ("@loja.com").
   excluir_remetentes: []          # nunca entram no relatório
-  incluir_sempre: []              # nunca são filtrados, mesmo com cara de newsletter (ex.: sites de freelancer)
+  incluir_sempre:                 # nunca são filtrados, mesmo com cara de newsletter ou no-reply
+    - "@99freelas.com.br"           # projetos novos
+    - "no-reply@accounts.google.com" # alertas de segurança da conta Google
   vip: []                         # sempre prioridade Alta
 
 kanban:
@@ -33,7 +35,7 @@ resumo_semanal:
   horario: "17:00"
 
 agenda:
-  enabled: false                  # true = lê o Google Agenda pelo endereço iCal secreto (GOOGLE_AGENDA_ICAL_URL no .env)
+  enabled: true                   # lê o Google Agenda pelo endereço iCal secreto (GOOGLE_AGENDA_ICAL_URL no .env)
 
 privacidade:
   max_caracteres_corpo: 1500

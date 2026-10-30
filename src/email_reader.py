@@ -23,8 +23,10 @@ LOTE_FETCH = 100
 CATEGORIAS_GMAIL_IGNORADAS = "category:promotions OR category:social OR category:forums"
 MESES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
+# "noreply" em qualquer parte do nome (noreply-pt@, jobalerts-noreply@) ou nomes típicos de sistema.
 _REMETENTE_AUTOMATICO = re.compile(
-    r"^(no[-_.]?reply|do[-_.]?not[-_.]?reply|mailer-daemon|postmaster|notifica[cç](ao|ão|oes|ões)|notifications?)@",
+    r"^([^@]*\b(no[-_.]?reply|do[-_.]?not[-_.]?reply)\b[^@]*"
+    r"|mailer-daemon|postmaster|notifica[cç](ao|ão|oes|ões)|notifications?)@",
     re.IGNORECASE,
 )
 _INICIO_CITACAO = re.compile(
