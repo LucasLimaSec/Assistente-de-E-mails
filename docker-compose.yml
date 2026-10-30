@@ -1,0 +1,11 @@
+services:
+  assistente-email:
+    build: .
+    image: assistente-email:latest
+    container_name: assistente-email
+    env_file: .env
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
+    # Fase 1 roda o --check e encerra. Vira "unless-stopped" quando o bot entrar (Fase 6).
+    restart: "no"

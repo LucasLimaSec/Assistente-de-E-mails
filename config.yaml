@@ -1,0 +1,48 @@
+# Preferências do Assistente de E-mails.
+# Segredos (senhas, tokens, chaves) ficam no .env, nunca aqui.
+
+geral:
+  fuso_horario: America/Sao_Paulo
+  horario_relatorio: "07:00"
+  # Dias com relatório. Também são os dias úteis usados para contar atraso.
+  dias_uteis: [seg, ter, qua, qui, sex, sab]
+  banco: data/assistente.db       # relativo à pasta deste arquivo
+
+# Contas de e-mail lidas (somente leitura). Para adicionar outra, copie o bloco.
+contas:
+  - nome: pessoal
+    tipo: imap                    # imap | outlook_oauth (Outlook entra numa fase futura)
+    endereco_env: GMAIL_PESSOAL_ENDERECO # variável do .env com o endereço
+    servidor: imap.gmail.com
+    porta: 993
+    senha_env: GMAIL_PESSOAL_SENHA_APP   # variável do .env com a senha de app
+
+filtros:
+  # Endereços completos ("x@loja.com") ou domínios ("@loja.com").
+  excluir_remetentes: []          # nunca entram no relatório
+  incluir_sempre: []              # nunca são filtrados, mesmo com cara de newsletter (ex.: sites de freelancer)
+  vip: []                         # sempre prioridade Alta
+
+kanban:
+  dias_para_atraso: 3             # dias úteis parada em A Fazer
+  max_itens_por_coluna: 5
+
+resumo_semanal:
+  enabled: true
+  dia: sab
+  horario: "17:00"
+
+agenda:
+  enabled: false                  # true = lê o Google Agenda pelo endereço iCal secreto (GOOGLE_AGENDA_ICAL_URL no .env)
+
+privacidade:
+  max_caracteres_corpo: 1500
+
+llm:
+  provider: claude                # claude | ollama
+  model: claude-haiku-5-5
+  fallback: none                  # none | ollama
+  local_only_domains: []          # ex.: ["empresa.com.br"]
+
+audio:
+  enabled: false                  # true = envia o resumo também como voz
