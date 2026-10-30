@@ -1,0 +1,19 @@
+From: Carlos Pereira <carlos@empresa.example.com>
+To: voce@example.org
+Subject: =?ISO-8859-1?Q?Reuni=E3o_de_amanh=E3?=
+Date: Fri, 30 Oct 2026 14:00:00 -0300
+Message-ID: <html-5@empresa.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="LIMITE"
+
+--LIMITE
+Content-Type: text/html; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><style>p { color: red; }</style></head><body>
+<p>Ol=E1, podemos mover a reuni=E3o para as 15h?</p><p>Confirma at=E9 hoje &amp; me avisa.</p>
+<script>alert(1)</script>
+<div class=3D"gmail_quote"><div>Em ter., 28 de out. de 2026, Voce escreveu:</div>
+<blockquote>Mensagem antiga <div>aninhada</div> que n=E3o deve aparecer</blockquote></div>
+</body></html>
+--LIMITE--

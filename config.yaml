@@ -39,9 +39,9 @@ privacidade:
   max_caracteres_corpo: 1500
 
 llm:
-  provider: claude                # claude | ollama
+  provider: ollama                # regras | ollama | claude
   model: claude-haiku-5-5
-  fallback: none                  # none | ollama
+  fallback: regras                # none | regras | ollama
   local_only_domains: []          # ex.: ["empresa.com.br"]
 
 audio:

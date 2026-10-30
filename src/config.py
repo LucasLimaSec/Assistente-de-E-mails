@@ -8,8 +8,8 @@ import yaml
 
 DIAS_SEMANA = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
 TIPOS_CONTA = {"imap", "outlook_oauth"}
-PROVEDORES_LLM = {"claude", "ollama"}
-FALLBACKS_LLM = {"none", "ollama"}
+PROVEDORES_LLM = {"regras", "ollama", "claude"}
+FALLBACKS_LLM = {"none", "regras", "ollama"}
 _HORARIO = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
