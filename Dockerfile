@@ -15,9 +15,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py config.yaml ./
 COPY src/ src/
+COPY prompts/ prompts/
+# Só os e-mails fictícios, usados pelo --benchmark-ia.
+COPY tests/fixtures/ tests/fixtures/
 
 RUN mkdir -p data && chown app:app data
 USER app
 
-# Fase 1: só a verificação. Nas fases de Telegram passa a rodar o bot permanente.
+# Por enquanto só a verificação. Na Fase 6 passa a rodar o bot permanente.
 CMD ["python", "main.py", "--check"]

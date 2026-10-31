@@ -33,6 +33,12 @@ def test_banco_relativo_a_pasta_do_config(cfg):
     (lambda c: c["kanban"].update(dias_para_atraso=0), "dias_para_atraso"),
     (lambda c: c["resumo_semanal"].update(dia="sabado"), "resumo_semanal.dia"),
     (lambda c: c["llm"].update(provider="gemini"), "llm.provider"),
+    (lambda c: c["llm"].update(lote_emails=0), "llm.lote_emails"),
+    (lambda c: c["llm"].update(rascunhos="sempre"), "llm.rascunhos"),
+    (lambda c: c["llm"].update(horario_analise="5h30"), "llm.horario_analise"),
+    (lambda c: c["llm"]["ollama"].pop("model"), "llm.ollama.model"),
+    (lambda c: c["llm"].update(provider="claude", claude={}), "llm.claude.model"),
+    (lambda c: c["oportunidades"].update(fontes="@99freelas.com.br"), "oportunidades.fontes"),
 ])
 def test_detecta_erros(cfg, alterar, trecho_do_erro):
     alterar(cfg)

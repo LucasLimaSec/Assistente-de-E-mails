@@ -1,0 +1,10 @@
+From: Hospedagem Exemplo <financeiro@hospedagem.example.net>
+To: voce@example.org
+Subject: Fatura do servidor VPS vence amanhã
+Date: Fri, 30 Oct 2026 07:10:00 -0300
+Message-ID: <fatura-2026-10@hospedagem.example.net>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+
+Olá! A fatura do seu servidor VPS, no valor de R$ 89,90, vence amanhã (31/10/2026).
+Após o vencimento o serviço pode ser suspenso. Pague pelo painel do cliente.

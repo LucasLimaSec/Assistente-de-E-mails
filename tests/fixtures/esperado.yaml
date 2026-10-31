@@ -1,0 +1,12 @@
+# Gabarito do --benchmark-ia: o que se espera da IA para cada e-mail fictício.
+# tipo e prioridade só são conferidos quando aparecem; aderencia_min/max valem para oportunidades.
+pessoal_orcamento.eml: {categoria: tarefa, tipo: responder, prioridade: alta}
+html_somente.eml: {categoria: tarefa, tipo: responder, prioridade: alta}
+fatura.eml: {categoria: tarefa, tipo: realizar, prioridade: alta}
+alerta_seguranca.eml: {categoria: tarefa, tipo: realizar, prioridade: alta}
+newsletter.eml: {categoria: informativo}
+sistema_noreply.eml: {categoria: informativo}
+resposta_automatica.eml: {categoria: informativo}
+freelancer.eml: {categoria: oportunidade}
+projeto_pentest.eml: {categoria: oportunidade, aderencia_min: 6}
+projeto_logo.eml: {categoria: oportunidade, aderencia_max: 3}

@@ -98,7 +98,10 @@ def coletar(cfg: dict, inicio: datetime, fim: datetime) -> Coleta:
 
 def coletar_conta(conta: dict, endereco: str, senha: str, inicio: datetime, fim: datetime,
                   cfg: dict, coleta: Coleta, conectar=None) -> None:
-    filtros = cfg.get("filtros") or {}
+    filtros = dict(cfg.get("filtros") or {})
+    # Sites de oportunidades também nunca são filtrados.
+    fontes = (cfg.get("oportunidades") or {}).get("fontes", [])
+    filtros["incluir_sempre"] = list(filtros.get("incluir_sempre", [])) + list(fontes)
     max_chars = cfg["privacidade"]["max_caracteres_corpo"]
 
     imap = (conectar or imaplib.IMAP4_SSL)(conta["servidor"], conta["porta"], timeout=TIMEOUT)
@@ -189,6 +192,18 @@ def assunto_de(msg: EmailMessage) -> str:
     return assunto or "(sem assunto)"
 
 
+_PREFIXOS_RESPOSTA = re.compile(r"^((re|res|fw|fwd|enc|tr|rv)\s*:\s*)+", re.IGNORECASE)
+
+
+def assunto_sem_prefixos(assunto: str) -> str:
+    """'Re: RES: Fwd: Orçamento' -> 'Orçamento'."""
+    return _PREFIXOS_RESPOSTA.sub("", assunto).strip() or assunto
+
+
+def e_automatico(remetente: str) -> bool:
+    return bool(_REMETENTE_AUTOMATICO.match(remetente))
+
+
 def corresponde(endereco: str, padroes: list[str]) -> bool:
     """'x@loja.com' compara o endereço; '@loja.com' compara o domínio e seus subdomínios."""
     endereco = endereco.lower()
@@ -217,7 +232,7 @@ def motivo_descarte(msg: EmailMessage, remetente: str, proprio_endereco: str,
         return "spam"
     if e_promocao:
         return "promoção"
-    if str(msg.get("Auto-Submitted", "no")).strip().lower() != "no" or _REMETENTE_AUTOMATICO.match(remetente):
+    if str(msg.get("Auto-Submitted", "no")).strip().lower() != "no" or e_automatico(remetente):
         return "automático"
     precedencia = str(msg.get("Precedence", "")).strip().lower()
     if msg.get("List-Unsubscribe") or msg.get("List-Id") or precedencia in ("bulk", "list", "junk"):

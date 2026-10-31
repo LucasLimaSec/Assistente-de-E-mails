@@ -86,6 +86,7 @@ cd Assistente-de-E-mails
 | `GMAIL_PESSOAL_ENDERECO` | Seu endereço Gmail |
 | `GMAIL_PESSOAL_SENHA_APP` | Conta Google > Segurança > Verificação em duas etapas > Senhas de app |
 | `GOOGLE_AGENDA_ICAL_URL` | Opcional. Google Agenda > Configurações da agenda > "Endereço secreto no formato iCal" |
+| `PERFIL_OPORTUNIDADES` | Seu perfil profissional em uma linha (áreas e tecnologias), usado para escolher as oportunidades de projetos |
 
 ### 3. Preencher o `.env`
 
@@ -96,18 +97,26 @@ nano .env
 
 O `.env` está no `.gitignore` e nunca deve ser enviado ao repositório.
 
-### 4. Subir o container
+### 4. Subir os containers e baixar o modelo de IA
 
 ```bash
 mkdir -p data        # crie antes, para a pasta não pertencer ao root
-docker compose up --build
+docker compose build
+docker compose up -d ollama
+docker compose exec ollama ollama pull qwen3.5:4b    # ~3–4 GB, uma vez só
+docker compose run --rm assistente-email
 ```
 
-Nesta fase, o container executa `python main.py --check` e encerra. A saída esperada é:
+O último comando executa `python main.py --check` e encerra.
+
+A saída esperada é:
 
 ```
 [ OK ] Config: config.yaml válido
 [ OK ] Banco: /app/data/assistente.db (6 tabelas: ...)
+[ OK ] IA principal (ollama): modelo qwen3.5:4b disponível em http://ollama:11434
+[ OK ] IA reserva (regras): sem IA, sempre disponível
+[ OK ] Perfil: N caracteres
 [ OK ] Telegram: bot @seu_bot acessa o chat de ...
 [ OK ] E-mail [pessoal]: ... conectado, N mensagens na caixa de entrada
 ```
@@ -131,6 +140,18 @@ docker compose run --rm assistente-email python main.py --emails
 
 Se algum e-mail importante aparecer como descartado, adicione o remetente em `filtros.incluir_sempre`. Se algo irrelevante passar, use `filtros.excluir_remetentes`.
 
+### 6. Medir e testar a IA
+
+```bash
+# Mede tempo, memória e acertos com 10 e-mails fictícios (não usa seus e-mails)
+docker compose run --rm assistente-email python main.py --benchmark-ia
+
+# Analisa seus e-mails reais e mostra tarefas, oportunidades e informativos (não grava nada)
+docker compose run --rm assistente-email python main.py --analisar --horas 24
+```
+
+Com `--provedor regras` ou `--provedor claude` dá para comparar com os outros provedores. Se o benchmark mostrar que o servidor é lento demais, troque `llm.ollama.model` por `qwen3.5:2b` ou diminua `llm.lote_emails`.
+
 ## Configuração
 
 As preferências ficam no [`config.yaml`](config.yaml); os segredos, só no `.env`.
@@ -143,7 +164,8 @@ As preferências ficam no [`config.yaml`](config.yaml); os segredos, só no `.en
 | `kanban` | Dias úteis até marcar atraso e máximo de itens por coluna |
 | `resumo_semanal` | Dia e horário do resumo da semana |
 | `agenda` | Liga a leitura do Google Agenda |
-| `llm` | Provedor de IA (`ollama`, `regras` ou `claude`), modelo, reserva e domínios que só podem ir à IA local |
+| `oportunidades` | Sites de projetos (`fontes`) cujos e-mails vão para a seção de oportunidades em vez do quadro |
+| `llm` | Provedor de IA (`ollama`, `regras` ou `claude`), reserva, horário da análise, tamanho do lote, modelo e domínios que só podem ir à IA local |
 | `audio` | Envia o resumo também como mensagem de voz |
 
 Para adicionar outra conta, copie o bloco em `contas` com um `nome` novo e crie as variáveis correspondentes no `.env`.
@@ -164,18 +186,22 @@ O plano completo, as decisões e as convenções do projeto estão no [`CLAUDE.m
 ## Estrutura do projeto
 
 ```
-├── main.py              # ponto de entrada (--check, --emails)
+├── main.py              # ponto de entrada (--check, --emails, --analisar, --benchmark-ia)
 ├── config.yaml          # preferências
 ├── .env.example         # modelo das variáveis secretas
 ├── Dockerfile
 ├── docker-compose.yml
 ├── src/
+│   ├── ai_analyzer.py   # lotes, novas tentativas, reserva e regras do config sobre a IA
+│   ├── benchmark.py     # --benchmark-ia
 │   ├── config.py        # leitura e validação do config.yaml
 │   ├── email_reader.py  # coleta IMAP, filtros e limpeza do corpo
 │   ├── janela.py        # período coberto por cada relatório
+│   ├── llm/             # provedores de IA: regras, ollama e claude
 │   ├── storage.py       # schema e conexão SQLite
 │   └── verificacao.py   # testes de chaves e conexões
-└── tests/               # pytest
+├── prompts/             # prompts da IA, editáveis sem mexer no código
+└── tests/               # pytest e e-mails fictícios (tests/fixtures)
 ```
 
 ## Privacidade e segurança

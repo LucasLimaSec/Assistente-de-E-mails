@@ -11,7 +11,8 @@ import telegram
 import telegram.error
 
 from src import storage
-from src.config import caminho_banco, validar_config
+from src.config import caminho_banco, perfil, validar_config
+from src.llm import criar_provedor
 
 TIMEOUT = 20
 
@@ -30,8 +31,8 @@ def verificar_tudo(cfg: dict) -> list[Resultado]:
         return [Resultado("Config", False, "; ".join(erros))]
 
     resultados = [Resultado("Config", True, "config.yaml válido"), verificar_banco(cfg)]
-    if cfg["llm"]["provider"] == "claude":
-        resultados.append(verificar_anthropic(cfg["llm"]["model"]))
+    resultados += verificar_ia(cfg)
+    resultados.append(verificar_perfil(cfg))
     resultados.append(verificar_telegram())
     for conta in cfg["contas"]:
         resultados.append(verificar_conta(conta))
@@ -47,8 +48,38 @@ def verificar_banco(cfg: dict) -> Resultado:
         nomes = storage.tabelas(conn)
         conn.close()
     except Exception as e:
-        return Resultado("Banco", False, f"{caminho}: {e}")
+        dica = ""
+        if "unable to open" in str(e) or isinstance(e, PermissionError):
+            dica = f"; a pasta data/ deve pertencer ao UID {os.getuid()} (veja o README)"
+        return Resultado("Banco", False, f"{caminho}: {e}{dica}")
     return Resultado("Banco", True, f"{caminho} ({len(nomes)} tabelas: {', '.join(nomes)})")
+
+
+def verificar_ia(cfg: dict) -> list[Resultado]:
+    """Testa o provedor principal e a reserva (llm.provider e llm.fallback)."""
+    llm = cfg["llm"]
+    resultados = []
+    for papel, nome in (("principal", llm["provider"]), ("reserva", llm.get("fallback", "none"))):
+        if nome == "none" or (papel == "reserva" and nome == llm["provider"]):
+            continue
+        rotulo = f"IA {papel} ({nome})"
+        if nome == "regras":
+            resultados.append(Resultado(rotulo, True, "sem IA, sempre disponível"))
+        elif nome == "claude":
+            r = verificar_anthropic(llm["claude"]["model"])
+            resultados.append(Resultado(rotulo, r.ok, r.detalhe))
+        else:
+            ok, detalhe = criar_provedor(nome, cfg).disponivel()
+            resultados.append(Resultado(rotulo, ok, detalhe))
+    return resultados
+
+
+def verificar_perfil(cfg: dict) -> Resultado:
+    variavel = (cfg.get("oportunidades") or {}).get("perfil_env", "PERFIL_OPORTUNIDADES")
+    texto = perfil(cfg)
+    if not texto:
+        return Resultado("Perfil", False, f"{variavel} vazio no .env; as oportunidades ficam sem ordem de aderência")
+    return Resultado("Perfil", True, f"{len(texto)} caracteres")
 
 
 def verificar_anthropic(modelo: str) -> Resultado:

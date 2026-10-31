@@ -20,10 +20,18 @@ contas:
 filtros:
   # Endereços completos ("x@loja.com") ou domínios ("@loja.com").
   excluir_remetentes: []          # nunca entram no relatório
-  incluir_sempre:                 # nunca são filtrados, mesmo com cara de newsletter ou no-reply
-    - "@99freelas.com.br"           # projetos novos
+  incluir_sempre: []              # nunca são filtrados, mesmo com cara de newsletter ou no-reply
+  vip:                            # nunca são filtrados e viram prioridade Alta
     - "no-reply@accounts.google.com" # alertas de segurança da conta Google
-  vip: []                         # sempre prioridade Alta
+
+# Sites de projetos: os e-mails deles não viram tarefas, e sim a seção
+# "Oportunidades" do relatório, com os que mais combinam com o seu perfil.
+oportunidades:
+  fontes:                         # nunca são filtrados
+    - "@99freelas.com.br"
+    - "@workana.com"
+  perfil_env: PERFIL_OPORTUNIDADES   # variável do .env com seu perfil profissional
+  max_no_relatorio: 5
 
 kanban:
   dias_para_atraso: 3             # dias úteis parada em A Fazer
@@ -42,9 +50,21 @@ privacidade:
 
 llm:
   provider: ollama                # regras | ollama | claude
-  model: claude-haiku-5-5
   fallback: regras                # none | regras | ollama
-  local_only_domains: []          # ex.: ["empresa.com.br"]
+  horario_analise: "05:30"        # a análise roda antes do relatório (modelo local é lento)
+  lote_emails: 6                  # e-mails por chamada à IA
+  rascunhos: sob_demanda          # sob_demanda (/rascunho N) | lote (gera todos na análise)
+  local_only_domains: []          # ex.: ["empresa.com.br"]; nunca vão para a API externa
+  ollama:
+    url: http://ollama:11434      # container do docker-compose; depois pode ser o PC de mesa
+    model: qwen3.5:4b             # alternativa mais leve: qwen3.5:2b
+    num_ctx: 8192                 # janela de contexto; maior = mais RAM
+    timeout_segundos: 900
+    keep_alive: 5m                # libera a RAM 5 min depois do uso
+    think: false                  # desliga o "raciocínio" do modelo (bem mais rápido em CPU)
+  claude:
+    model: claude-haiku-5-5
+    effort: low
 
 audio:
   enabled: false                  # true = envia o resumo também como voz

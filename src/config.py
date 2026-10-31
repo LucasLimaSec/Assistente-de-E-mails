@@ -1,5 +1,6 @@
 """Carrega e valida o config.yaml."""
 
+import os
 import re
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -10,6 +11,7 @@ DIAS_SEMANA = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
 TIPOS_CONTA = {"imap", "outlook_oauth"}
 PROVEDORES_LLM = {"regras", "ollama", "claude"}
 FALLBACKS_LLM = {"none", "regras", "ollama"}
+MODOS_RASCUNHO = {"sob_demanda", "lote"}
 _HORARIO = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
@@ -24,6 +26,12 @@ def carregar_config(caminho: str | Path) -> dict:
 def caminho_banco(cfg: dict) -> Path:
     banco = Path(cfg["geral"]["banco"])
     return banco if banco.is_absolute() else cfg["_pasta"] / banco
+
+
+def perfil(cfg: dict) -> str:
+    """Perfil profissional (do .env), usado para avaliar oportunidades e escrever rascunhos."""
+    variavel = (cfg.get("oportunidades") or {}).get("perfil_env")
+    return os.environ.get(variavel, "").strip() if variavel else ""
 
 
 def validar_config(cfg: dict) -> list[str]:
@@ -80,12 +88,32 @@ def validar_config(cfg: dict) -> list[str]:
         if not _HORARIO.match(str(semanal.get("horario", ""))):
             erros.append("resumo_semanal.horario deve estar no formato HH:MM")
 
+    oportunidades = cfg.get("oportunidades") or {}
+    if not isinstance(oportunidades.get("fontes", []), list):
+        erros.append("oportunidades.fontes deve ser uma lista")
+    maximo = oportunidades.get("max_no_relatorio", 5)
+    if not isinstance(maximo, int) or maximo < 1:
+        erros.append("oportunidades.max_no_relatorio deve ser um inteiro positivo")
+
     llm = cfg.get("llm") or {}
-    if llm.get("provider") not in PROVEDORES_LLM:
+    provedor, reserva = llm.get("provider"), llm.get("fallback", "none")
+    if provedor not in PROVEDORES_LLM:
         erros.append(f"llm.provider deve ser um de {sorted(PROVEDORES_LLM)}")
-    if llm.get("fallback", "none") not in FALLBACKS_LLM:
+    if reserva not in FALLBACKS_LLM:
         erros.append(f"llm.fallback deve ser um de {sorted(FALLBACKS_LLM)}")
-    if llm.get("provider") == "claude" and not llm.get("model"):
-        erros.append("llm.model não definido")
+    if not _HORARIO.match(str(llm.get("horario_analise", ""))):
+        erros.append("llm.horario_analise deve estar no formato HH:MM")
+    lote = llm.get("lote_emails")
+    if not isinstance(lote, int) or lote < 1:
+        erros.append("llm.lote_emails deve ser um inteiro positivo")
+    if llm.get("rascunhos") not in MODOS_RASCUNHO:
+        erros.append(f"llm.rascunhos deve ser um de {sorted(MODOS_RASCUNHO)}")
+    if "ollama" in (provedor, reserva):
+        ollama = llm.get("ollama") or {}
+        for campo in ("url", "model"):
+            if not ollama.get(campo):
+                erros.append(f"llm.ollama.{campo} não definido")
+    if provedor == "claude" and not (llm.get("claude") or {}).get("model"):
+        erros.append("llm.claude.model não definido")
 
     return erros

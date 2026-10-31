@@ -261,3 +261,18 @@ Como o modelo pequeno é lento e tem pouca memória, o fluxo muda:
 - **Rascunhos sob demanda**: gerados só quando você pede `/rascunho N` (~1–2 min no servidor) e guardados no banco. Fica configurável (`llm.rascunhos: sob_demanda | lote`) para quando houver IA mais rápida.
 - **Benchmark antes de decidir**: `python main.py --benchmark-ia` roda os e-mails fictícios no servidor e mede tempo, RAM e acertos. O modelo e o tamanho do lote saem dessa medição.
 - **Futuro**: `llm.ollama.url` aponta hoje para o container (`http://ollama:11434`). Para usar o PC de mesa, basta trocar pela URL dele (rede local ou Tailscale, nunca exposta à internet). Pode virar uma lista em ordem de preferência: PC de mesa primeiro, servidor como reserva.
+
+## 14. Oportunidades de projetos (30/10/2026)
+
+O 99Freelas manda ~14 projetos por dia; virar uma tarefa por projeto encheria o quadro. Decisão:
+
+- **Fontes** (`oportunidades.fontes`): `@99freelas.com.br` e `@workana.com`. Nunca são filtradas e não entram no Kanban: aparecem na seção "💼 Oportunidades" do relatório, com as `max_no_relatorio` (5) de maior aderência e o resto como "+N".
+- **Aderência** (0 a 10): a IA compara cada projeto com o perfil profissional, guardado no `.env` (`PERFIL_OPORTUNIDADES`) para não ficar no repositório público. No modo `regras`, a aderência conta as palavras do perfil presentes no projeto.
+- **Propaganda dos sites** (ex.: cursos da Workana) fica como "informativo", não como oportunidade.
+- **Projeto que interessar**: `/nova` cria a tarefa no quadro (Fase 6).
+- **Alertas de segurança do Google** (`no-reply@accounts.google.com`) estão em `vip`: viram tarefa de prioridade Alta.
+- **LinkedIn**: continua descartado como newsletter, até decisão contrária.
+
+Regras que o config impõe sobre a IA: `vip` vira sempre tarefa Alta; e-mail de fonte que a IA chamar de tarefa vira oportunidade; "oportunidade" vinda de uma pessoa (fora das fontes) vira tarefa de responder.
+
+**Aprendizado do teste real com Ollama (30/10/2026)**: um modelo pequeno pode entrar em loop gerando itens no JSON até estourar o contexto (6,5 min perdidos num lote). Cada chamada tem teto de saída (`num_predict` = 200 + 150 por e-mail); resposta cortada vira erro, nova tentativa e depois `regras`.
