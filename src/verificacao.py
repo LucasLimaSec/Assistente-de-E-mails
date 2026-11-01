@@ -12,6 +12,7 @@ import telegram.error
 
 from src import storage
 from src.config import caminho_banco, perfil, validar_config
+from src.email_reader import pasta_enviados
 from src.llm import criar_provedor
 
 TIMEOUT = 20
@@ -148,6 +149,7 @@ def verificar_conta(conta: dict) -> Resultado:
         if status != "OK":
             return Resultado(nome, False, "login ok, mas não abriu a caixa de entrada")
         total = int(dados[0])
+        enviados = pasta_enviados(imap)
     except imaplib.IMAP4.error as e:
         return Resultado(nome, False, f"login recusado ({e}); use uma senha de app")
     finally:
@@ -155,7 +157,9 @@ def verificar_conta(conta: dict) -> Resultado:
             imap.logout()
         except (imaplib.IMAP4.error, OSError):
             pass
-    return Resultado(nome, True, f"{endereco} conectado, {total} mensagens na caixa de entrada")
+    pasta = (f"pasta de enviados {enviados}" if enviados
+             else "pasta de enviados NÃO encontrada (respostas suas não vão fechar tarefas)")
+    return Resultado(nome, True, f"{endereco} conectado, {total} mensagens na caixa de entrada, {pasta}")
 
 
 def verificar_agenda() -> Resultado:

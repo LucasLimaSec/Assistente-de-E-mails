@@ -285,6 +285,9 @@ def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s",
                         datefmt="%H:%M:%S")
+    # O httpx registra a URL de cada chamada, e a URL do Telegram contém o token do bot.
+    for barulhento in ("httpx", "httpcore"):
+        logging.getLogger(barulhento).setLevel(logging.WARNING)
     if args.check:
         return checar(args.config)
     if args.emails:
