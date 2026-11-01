@@ -253,7 +253,7 @@ def montar_email(msg: EmailMessage, conta: str, uid: str, recebido: datetime,
         remetente=remetente,
         assunto=assunto_de(msg),
         data=recebido,
-        corpo=limpar_corpo(extrair_texto(msg), max_chars),
+        corpo=limpar_corpo(recortar_aviso(extrair_texto(msg), remetente), max_chars),
         vip=corresponde(remetente, filtros.get("vip", [])),
     )
 
@@ -318,6 +318,31 @@ def html_para_texto(html: str) -> str:
     conversor.feed(html)
     conversor.close()
     return "".join(conversor.partes)
+
+
+# Avisos de projeto dos sites de freelancer: só o trecho do projeto vai para a IA. A saudação com
+# o nome, os links e o rodapé não ajudam a classificar e custam tempo no modelo local.
+_RECORTES = {
+    "99freelas.com.br": (re.compile(r"novo projeto que pode ser do seu interesse:", re.I),
+                         re.compile(r"^\s*\*?\s*Este é um e-?mail automático", re.I | re.M)),
+}
+_LINHAS_RUIDO = re.compile(r"^\s*(Leia mais\.?|Enviar Proposta)\s*$", re.I | re.M)
+
+
+def recortar_aviso(texto: str, remetente: str) -> str:
+    dominio = remetente.rsplit("@", 1)[-1].lower()
+    for chave, (inicio, fim) in _RECORTES.items():
+        if dominio != chave and not dominio.endswith("." + chave):
+            continue
+        achados = list(inicio.finditer(texto))
+        if not achados:      # formato mudou: manda o e-mail inteiro, como antes
+            return texto
+        trecho = texto[achados[-1].end():]
+        corte = fim.search(trecho)
+        if corte:
+            trecho = trecho[:corte.start()]
+        return _LINHAS_RUIDO.sub("", trecho)
+    return texto
 
 
 def limpar_corpo(texto: str, max_chars: int) -> str:

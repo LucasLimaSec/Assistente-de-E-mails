@@ -7,6 +7,7 @@ import pytest
 
 from src import email_reader
 from src.email_reader import (Coleta, coletar, coletar_conta, corresponde, ler_internaldate, limpar_corpo,
+                              recortar_aviso,
                               mascarar_numeros, motivo_descarte)
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -231,3 +232,45 @@ def test_falha_de_conexao_vira_erro(monkeypatch):
     cfg = {"contas": [CONTA], "filtros": {}, "privacidade": {"max_caracteres_corpo": 1500}}
     coleta = coletar(cfg, INICIO, FIM)
     assert coleta.erros == ["[pessoal] conexão recusada"]
+
+
+AVISO_99FREELAS = """Olá, Fulano de Tal, há um novo projeto que pode ser do seu interesse. Veja os detalhes.
+
+Visualizar no navegador
+|
+Cancelar inscrição
+
+Olá, Fulano de Tal.
+
+Há um novo projeto que pode ser do seu interesse:
+
+Pentest em loja virtual
+
+Segurança & TI
+| Especialista
+| Orçamento: Aberto
+
+Preciso de um teste de invasão na minha loja...
+Leia mais.
+
+Habilidades desejadas: Python e OWASP
+
+  * Este é um email automático. Para enviar uma proposta ou pergunta, clique no botão abaixo.
+
+Enviar Proposta
+
+99Freelas, 2014 - 2026
+"""
+
+
+def test_recorta_aviso_do_99freelas_sem_nome_nem_rodape():
+    corpo = limpar_corpo(recortar_aviso(AVISO_99FREELAS, "no-reply@99freelas.com.br"), 1500)
+    assert corpo.startswith("Pentest em loja virtual")
+    assert "Habilidades desejadas: Python e OWASP" in corpo
+    for ruido in ("Fulano", "Cancelar inscrição", "Leia mais", "Enviar Proposta", "automático", "2014"):
+        assert ruido not in corpo
+
+
+def test_recorte_nao_afeta_outros_remetentes_nem_formato_desconhecido():
+    assert recortar_aviso(AVISO_99FREELAS, "maria@example.com") == AVISO_99FREELAS
+    assert recortar_aviso("Texto em outro formato", "no-reply@99freelas.com.br") == "Texto em outro formato"
