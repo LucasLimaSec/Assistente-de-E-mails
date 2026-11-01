@@ -3,3 +3,5 @@ python-telegram-bot>=22.8,<23
 PyYAML>=6.0.3,<7
 python-dotenv>=1.2,<2
 tzdata>=2025.2
+icalendar>=6.3,<7
+recurring-ical-events>=3.8,<4

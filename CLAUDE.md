@@ -304,3 +304,12 @@ Regras que o config impõe sobre a IA: `vip` vira sempre tarefa Alta; e-mail de 
 - A linha de comandos do exemplo (`/feito 12 · /nova texto · /quadro`) entra na Fase 6, junto com os comandos.
 - O log do httpx fica em WARNING: no nível INFO ele registrava a URL com o token do bot.
 
+## 17. Comandos, agenda e resumo semanal (Fase 6, 01/11/2026)
+
+- **Bot**: `python main.py --bot` (polling). Responde só ao `TELEGRAM_CHAT_ID` (filtro em todos os handlers); outros chats não casam com nenhum handler. `concurrent_updates` ligado para um `/rascunho` lento não travar os outros comandos; cada comando abre a própria conexão SQLite numa thread.
+- **Comandos**: `/quadro`, `/feito N` (vários números), `/andamento N`, `/aguardando N`, `/afazer N`, `/nova texto` (`/nova ! texto` = alta; tipo Realizar, origem telegram), `/rascunho N` (`novo` gera outro), `/semana`, `/ajuda`. Texto livre vira nota; notas desde o último relatório aparecem em "Feito" com 📝. A lógica fica em `comandos.py` (funções puras), e o `telegram_bot.py` só liga os handlers.
+- **/rascunho**: o corpo do e-mail não é guardado, então o e-mail mais recente da tarefa é relido pelo IMAP (`SEARCH HEADER Message-ID`, somente leitura), passa pela mesma limpeza e vai para o `llm.provider`. O rascunho fica em `tarefas.rascunho` e é reaproveitado. Tarefa sem e-mail (criada pelo Telegram) não tem rascunho.
+- **Google Agenda**: iCal baixado a cada relatório (`icalendar` + `recurring-ical-events` para eventos repetidos; cancelados ignorados). Eventos desde o último relatório até o fim de ontem entram em "Feito" com 📅; os de hoje em "📅 Agenda de hoje" (dia inteiro primeiro). A URL nunca aparece em mensagens de erro.
+- **Resumo semanal**: `--resumo-semanal` (com `--dry-run`) e `/semana`. Semana = segunda 00:00 até agora: concluídas (até 10), pendentes, 3 mais atrasadas, notas, oportunidades (a melhor), execuções e tokens; custo estimado só com o provedor `claude` (US$ 0,10/0,50 por milhão). O envio automático no sábado às 17:00 vem na Fase 7.
+- **Relatório**: termina com a linha de comandos (`/feito N` com o número da primeira tarefa de A Fazer).
+

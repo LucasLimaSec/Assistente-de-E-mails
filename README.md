@@ -185,6 +185,30 @@ docker compose run --rm assistente-email python main.py --relatorio
 
 O relatório traz o resumo no topo, o que foi feito desde o último relatório, as colunas do quadro (até `kanban.max_itens_por_coluna` itens cada, o resto como "+N"), as oportunidades por aderência, o foco do dia e avisos de falha. Na Fase 7 ele passa a sair sozinho às 08:00.
 
+### 9. Conversar com o bot
+
+```bash
+# Deixa o bot no ar (Ctrl+C para parar; na Fase 7 ele roda sozinho no container)
+docker compose run --rm assistente-email python main.py --bot
+
+# Resumo da semana (sábado às 17:00 a partir da Fase 7)
+docker compose run --rm assistente-email python main.py --resumo-semanal --dry-run
+```
+
+| No Telegram | Efeito |
+| --- | --- |
+| `/quadro` | Mostra o quadro completo |
+| `/feito 12` | Conclui a tarefa 12 (aceita vários: `/feito 3 5`) |
+| `/andamento 12`, `/aguardando 12`, `/afazer 12` | Move entre as colunas |
+| `/nova Ligar para o contador` | Cria uma tarefa (`/nova ! texto` = prioridade alta) |
+| `/rascunho 12` | Rascunho de resposta, gerado pela IA na hora e guardado (`/rascunho 12 novo` gera outro) |
+| `/semana` | Resumo da semana até agora |
+| Texto livre | Vira nota do dia e aparece em "Feito" no próximo relatório |
+
+O bot responde só ao `TELEGRAM_CHAT_ID`; mensagens de qualquer outro chat são ignoradas. Para o `/rascunho`, o e-mail é relido da caixa de entrada na hora (o corpo nunca fica salvo no banco).
+
+O relatório também mostra a **Google Agenda** (`agenda.enabled: true` e `GOOGLE_AGENDA_ICAL_URL` no `.env`): os eventos desde o último relatório entram em "Feito" e os de hoje em "Agenda de hoje".
+
 ## Configuração
 
 As preferências ficam no [`config.yaml`](config.yaml); os segredos, só no `.env`.
@@ -225,17 +249,20 @@ O plano completo, as decisões e as convenções do projeto estão no [`CLAUDE.m
 ├── Dockerfile
 ├── docker-compose.yml
 ├── src/
+│   ├── agenda.py        # Google Agenda pelo endereço iCal
 │   ├── ai_analyzer.py   # lotes, novas tentativas, reserva e regras do config sobre a IA
 │   ├── benchmark.py     # --benchmark-ia
+│   ├── comandos.py      # comandos do bot (/feito, /nova, /rascunho...)
 │   ├── config.py        # leitura e validação do config.yaml
 │   ├── email_reader.py  # coleta IMAP (entrada e enviados), filtros e limpeza do corpo
 │   ├── fluxo.py         # coleta → análise → quadro
 │   ├── janela.py        # período coberto por cada relatório
 │   ├── kanban.py        # regras do quadro: mover, deduplicar, atraso, retrato do dia
 │   ├── report.py        # monta a mensagem do relatório (HTML do Telegram)
+│   ├── resumo.py        # resumo semanal
 │   ├── llm/             # provedores de IA: regras, ollama e claude
 │   ├── storage.py       # schema e conexão SQLite
-│   ├── telegram_bot.py  # envio pelo bot
+│   ├── telegram_bot.py  # envio e bot de comandos
 │   └── verificacao.py   # testes de chaves e conexões
 ├── prompts/             # prompts da IA, editáveis sem mexer no código
 └── tests/               # pytest e e-mails fictícios (tests/fixtures)

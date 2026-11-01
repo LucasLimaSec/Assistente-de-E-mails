@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from src.ai_analyzer import analisar, montar_contexto
-from src import kanban, storage
+from src import agenda, kanban, storage
 from src.config import caminho_banco, carregar_config, validar_config
 from src.email_reader import Coleta, coletar
 from src.janela import inicio_janela
@@ -284,10 +284,18 @@ def relatorio(caminho_config: str, horas: int | None, provedor: str | None, dry_
     try:
         r = atualizar_quadro(cfg, conn, inicio, agora)
         colunas = kanban.quadro(conn, agora, cfg, ultimo_relatorio)
+        avisos = avisos_do_fluxo(r, cfg)
+        agenda_feita, agenda_hoje = [], []
+        if agenda.ativa(cfg):
+            try:
+                agenda_feita, agenda_hoje = agenda.feitos_e_hoje(cfg, ultimo_relatorio, agora)
+            except agenda.ErroAgenda as e:
+                avisos.append(f"Google Agenda: {e}")
         dados = report.DadosRelatorio(
             agora=agora, desde=ultimo_relatorio, colunas=colunas,
             oportunidades=[report.Oportunidade(t, a) for t, a in kanban.oportunidades(conn, inicio)],
-            avisos=avisos_do_fluxo(r, cfg), marcar_conta=len(cfg["contas"]) > 1)
+            avisos=avisos, marcar_conta=len(cfg["contas"]) > 1,
+            notas=kanban.notas_desde(conn, ultimo_relatorio), agenda_feita=agenda_feita, agenda_hoje=agenda_hoje)
         texto = report.montar(dados, cfg["kanban"]["max_itens_por_coluna"],
                               (cfg.get("oportunidades") or {}).get("max_no_relatorio", 5))
         if dry_run:
@@ -305,6 +313,45 @@ def relatorio(caminho_config: str, horas: int | None, provedor: str | None, dry_
         if conn is not banco:
             conn.close()
         banco.close()
+
+
+def resumo_semanal(caminho_config: str, dry_run: bool) -> int:
+    from src import resumo
+    from src.telegram_bot import ErroTelegram, enviar
+
+    cfg = carregar_valido(caminho_config)
+    if cfg is None:
+        return 1
+    conn = abrir_banco(cfg)
+    try:
+        texto = resumo.montar(conn, cfg, agora_local(cfg))
+    finally:
+        conn.close()
+    if dry_run:
+        print(texto)
+        return 0
+    try:
+        enviar(texto)
+    except ErroTelegram as e:
+        print(f"[FALHA] Telegram: {e}\n\n{texto}")
+        return 1
+    print("Resumo semanal enviado ao Telegram.")
+    return 0
+
+
+def iniciar_bot(caminho_config: str) -> int:
+    from src.telegram_bot import ErroTelegram, rodar_bot
+
+    cfg = carregar_valido(caminho_config)
+    if cfg is None:
+        return 1
+    print("Bot no ar: responde só ao TELEGRAM_CHAT_ID. Ctrl+C para parar.")
+    try:
+        rodar_bot(cfg)
+    except ErroTelegram as e:
+        print(f"[FALHA] Telegram: {e}")
+        return 1
+    return 0
 
 
 def avisos_do_fluxo(r, cfg: dict) -> list[str]:
@@ -333,7 +380,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--relatorio", action="store_true",
                         help="fluxo diário completo: coleta, análise, quadro e envio ao Telegram")
     parser.add_argument("--dry-run", action="store_true",
-                        help="com --relatorio: mostra o relatório no terminal sem enviar nem gravar nada")
+                        help="com --relatorio ou --resumo-semanal: mostra no terminal sem enviar nem gravar nada")
+    parser.add_argument("--resumo-semanal", action="store_true", help="envia o resumo da semana ao Telegram")
+    parser.add_argument("--bot", action="store_true",
+                        help="deixa o bot no ar respondendo aos comandos (/feito, /nova, /quadro...)")
     parser.add_argument("--quadro", action="store_true", help="mostra o quadro atual")
     parser.add_argument("--mover", nargs=2, metavar=("N", "COLUNA"),
                         help="move a tarefa N para a coluna (a_fazer, em_andamento, aguardando, feito)")
@@ -360,6 +410,10 @@ def main(argv: list[str] | None = None) -> int:
         return listar_emails(args.config, args.horas, args.descartados, args.corpo)
     if args.analisar:
         return analisar_emails(args.config, args.horas, args.provedor)
+    if args.bot:
+        return iniciar_bot(args.config)
+    if args.resumo_semanal:
+        return resumo_semanal(args.config, args.dry_run)
     if args.relatorio or args.dry_run:
         return relatorio(args.config, args.horas, args.provedor, args.dry_run)
     if args.atualizar_quadro:
@@ -373,8 +427,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg = carregar_valido(args.config)
         return rodar(cfg, args.provedor) if cfg else 1
 
-    print("O agendamento automático chega na Fase 7. Use --relatorio (ou --relatorio --dry-run), --check, "
-          "--emails, --analisar, --atualizar-quadro, --quadro, --mover ou --benchmark-ia.")
+    print("O agendamento automático chega na Fase 7. Use --bot, --relatorio, --resumo-semanal (os dois com "
+          "--dry-run), --check, --emails, --analisar, --atualizar-quadro, --quadro, --mover ou --benchmark-ia.")
     return 2
 
 

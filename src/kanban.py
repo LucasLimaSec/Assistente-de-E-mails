@@ -283,6 +283,38 @@ def _ultimo_recebido(conn: sqlite3.Connection, tarefa_id: int) -> datetime:
     return max(datas) if datas else datetime.min.replace(tzinfo=timezone.utc)
 
 
+def email_da_tarefa(conn: sqlite3.Connection, tarefa_id: int) -> tuple[str, str] | None:
+    """(conta, Message-ID) do e-mail recebido mais recente da tarefa, para o /rascunho."""
+    linhas = conn.execute("SELECT conta, message_id, data FROM emails WHERE tarefa_id = ? AND enviado = 0",
+                          (tarefa_id,)).fetchall()
+    if not linhas:
+        return None
+    ultima = max(linhas, key=lambda l: datetime.fromisoformat(l["data"]))
+    return ultima["conta"], ultima["message_id"]
+
+
+def salvar_rascunho(conn: sqlite3.Connection, tarefa_id: int, texto: str) -> None:
+    with conn:
+        conn.execute("UPDATE tarefas SET rascunho = ? WHERE id = ?", (texto, tarefa_id))
+
+
+def nova_nota(conn: sqlite3.Connection, texto: str, agora: datetime) -> int:
+    with conn:
+        cur = conn.execute("INSERT INTO notas (texto, criada_em) VALUES (?, ?)", (texto.strip(), agora.isoformat()))
+    return cur.lastrowid
+
+
+def notas_desde(conn: sqlite3.Connection, desde: datetime) -> list[str]:
+    linhas = conn.execute("SELECT texto, criada_em FROM notas ORDER BY id").fetchall()
+    return [l["texto"] for l in linhas if datetime.fromisoformat(l["criada_em"]) >= desde]
+
+
+def concluidas_desde(conn: sqlite3.Connection, desde: datetime) -> list[Tarefa]:
+    return [_tarefa(l) for l in conn.execute(
+        "SELECT * FROM tarefas WHERE coluna = 'feito' AND concluida_em IS NOT NULL ORDER BY concluida_em")
+        if _data(l["concluida_em"]) >= desde]
+
+
 def oportunidades(conn: sqlite3.Connection, desde: datetime) -> list[tuple[str, int]]:
     """(título, aderência) das oportunidades recebidas desde `desde`, da maior aderência para a menor."""
     # Datas gravadas com fusos diferentes: a comparação é feita em Python, não no texto.
@@ -318,10 +350,7 @@ def marcar_atraso(tarefas: list[Tarefa], agora: datetime, cfg: dict) -> None:
 
 def quadro(conn: sqlite3.Connection, agora: datetime, cfg: dict, feito_desde: datetime) -> dict[str, list[Tarefa]]:
     """Colunas do quadro, ordenadas por prioridade e prazo. Feito só mostra o que foi concluído desde `feito_desde`."""
-    tarefas = abertas(conn) + [
-        _tarefa(l) for l in conn.execute("SELECT * FROM tarefas WHERE coluna = 'feito' AND concluida_em IS NOT NULL")
-        if _data(l["concluida_em"]) >= feito_desde
-    ]
+    tarefas = abertas(conn) + concluidas_desde(conn, feito_desde)
     marcar_atraso(tarefas, agora, cfg)
     colunas = {c: [] for c in COLUNAS}
     for t in sorted(tarefas, key=lambda t: (ORDEM_PRIORIDADE[t.prioridade], t.prazo or "9999-12-31", t.id)):

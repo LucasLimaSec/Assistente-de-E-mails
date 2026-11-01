@@ -160,6 +160,35 @@ def coletar_conta(conta: dict, endereco: str, senha: str, inicio: datetime, fim:
             pass
 
 
+def buscar_email(cfg: dict, nome_conta: str, message_id: str, conectar=None) -> Email | None:
+    """Relê um e-mail pelo Message-ID (o corpo não fica no banco), para gerar o rascunho sob demanda."""
+    conta = next((c for c in cfg["contas"] if c["nome"] == nome_conta), None)
+    if conta is None or conta["tipo"] != "imap":
+        return None
+    endereco, senha = os.environ.get(conta["endereco_env"]), os.environ.get(conta["senha_env"])
+    if not endereco or not senha:
+        return None
+    filtros = cfg.get("filtros") or {}
+    imap = (conectar or imaplib.IMAP4_SSL)(conta["servidor"], conta["porta"], timeout=TIMEOUT)
+    try:
+        imap.login(endereco, senha)
+        status, _ = imap.select("INBOX", readonly=True)
+        if status != "OK":
+            raise imaplib.IMAP4.error("não foi possível abrir a caixa de entrada")
+        # Só o Message-ID entre aspas: sem espaços nem aspas internas, não dá para injetar critérios.
+        alvo = message_id.replace('"', "").replace("\\", "").strip()
+        uids = buscar(imap, "HEADER", "Message-ID", f'"{alvo}"')
+        for uid, recebido, bruto in baixar(imap, uids[-1:], f"(INTERNALDATE BODY.PEEK[]<0.{LIMITE_BYTES}>)"):
+            msg = email.message_from_bytes(bruto, policy=policy.default)
+            return montar_email(msg, nome_conta, uid, recebido, filtros, cfg["privacidade"]["max_caracteres_corpo"])
+        return None
+    finally:
+        try:
+            imap.logout()
+        except (imaplib.IMAP4.error, OSError):
+            pass
+
+
 _LINHA_LIST = re.compile(rb'^\((?P<flags>[^)]*)\) (?:"[^"]*"|NIL) (?P<nome>.+)$')
 
 

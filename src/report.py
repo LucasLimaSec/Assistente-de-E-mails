@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from html import escape
 
+from src.agenda import Evento
 from src.kanban import Tarefa
 
 DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
@@ -27,17 +28,27 @@ class DadosRelatorio:
     oportunidades: list[Oportunidade] = field(default_factory=list)
     avisos: list[str] = field(default_factory=list)
     marcar_conta: bool = False            # com mais de uma conta, cada item mostra a conta
+    notas: list[str] = field(default_factory=list)            # notas livres mandadas ao bot
+    agenda_feita: list[Evento] = field(default_factory=list)  # eventos desde o último relatório
+    agenda_hoje: list[Evento] = field(default_factory=list)
+    comandos: bool = True                 # linha de comandos no fim
 
 
 def montar(dados: DadosRelatorio, max_itens: int = 5, max_oportunidades: int = 5) -> str:
     hoje = dados.agora.date()
     partes = [_cabecalho(dados)]
 
-    feitas = dados.colunas["feito"]
+    feitas = ([f"• {_texto(t, dados)}" for t in dados.colunas["feito"]]
+              + [f"• 📝 {escape(n)}" for n in dados.notas]
+              + [f"• 📅 {escape(e.titulo)}" for e in dados.agenda_feita])
     if feitas:
         titulo = "FEITO ONTEM" if dados.desde.date() == hoje - timedelta(days=1) \
             else f"FEITO DESDE {DIAS[dados.desde.weekday()].upper()}"
-        partes.append(_secao(f"✅ {titulo}", [f"• {_texto(t, dados)}" for t in feitas], max_itens))
+        partes.append(_secao(f"✅ {titulo}", feitas, max_itens, "item(ns)"))
+
+    if dados.agenda_hoje:
+        partes.append(_secao("📅 AGENDA DE HOJE", [f"• {_hora(e)} {escape(e.titulo)}" for e in dados.agenda_hoje],
+                             max_itens, "evento(s)"))
 
     a_fazer = dados.colunas["a_fazer"]
     if a_fazer:
@@ -61,7 +72,34 @@ def montar(dados: DadosRelatorio, max_itens: int = 5, max_oportunidades: int = 5
 
     if dados.avisos:
         partes.append("\n".join(f"⚠️ {escape(a)}" for a in dados.avisos))
+    if dados.comandos:
+        partes.append(linha_comandos(a_fazer))
     return "\n\n".join(partes)
+
+
+def linha_comandos(a_fazer: list[Tarefa]) -> str:
+    numero = a_fazer[0].id if a_fazer else "N"
+    return f"<i>Comandos: /feito {numero} · /nova texto · /quadro · /ajuda</i>"
+
+
+def montar_quadro(colunas: dict[str, list[Tarefa]], agora: datetime, max_itens: int = 10) -> str:
+    """Quadro completo para o /quadro (sem resumo, oportunidades nem foco)."""
+    hoje = agora.date()
+    dados = DadosRelatorio(agora=agora, desde=agora, colunas=colunas)
+    partes = [f"📋 <b>Quadro de {DIAS[agora.weekday()].lower()}, {agora:%d/%m}</b>"]
+    for coluna, titulo in (("a_fazer", "📋 A FAZER"), ("em_andamento", "🔄 EM ANDAMENTO"),
+                           ("aguardando", "⏳ AGUARDANDO")):
+        tarefas = colunas[coluna]
+        if coluna == "a_fazer":
+            linhas = [_linha_a_fazer(t, hoje, dados) for t in tarefas]
+        else:
+            linhas = [f"• #{t.id} {_texto(t, dados)}{_prazo(t, hoje)}" for t in tarefas]
+        partes.append(_secao(titulo, linhas or ["(vazio)"], max_itens))
+    return "\n\n".join(partes)
+
+
+def _hora(e: Evento) -> str:
+    return "Dia todo:" if e.dia_inteiro else f"{e.inicio:%H:%M}"
 
 
 def _cabecalho(dados: DadosRelatorio) -> str:

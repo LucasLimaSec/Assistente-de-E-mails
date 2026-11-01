@@ -66,7 +66,9 @@ def test_relatorio_no_formato_do_exemplo():
 • 9/10 Pentest em API
 • 1/10 Logo para padaria
 
-💡 <b>Foco do dia:</b> #12 Maria – aprovar orçamento (hoje)."""
+💡 <b>Foco do dia:</b> #12 Maria – aprovar orçamento (hoje).
+
+<i>Comandos: /feito 12 · /nova texto · /quadro · /ajuda</i>"""
 
 
 def test_limite_por_coluna_e_resto():
