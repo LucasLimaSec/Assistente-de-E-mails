@@ -292,3 +292,15 @@ Regras que o config impõe sobre a IA: `vip` vira sempre tarefa Alta; e-mail de 
 - **Banco v2**: a tabela `emails` guarda também categoria, título e aderência, para o relatório listar as oportunidades. Bancos v1 migram sozinhos.
 - **Idempotente**: e-mail já registrado não é analisado de novo, então dá para rodar `--atualizar-quadro` várias vezes. Cada rodada fica em `execucoes` com os tokens gastos.
 
+## 16. Relatório no Telegram (Fase 5, 01/11/2026)
+
+- **Comando**: `--relatorio` roda o fluxo completo (coleta, análise, quadro, envio) e guarda o retrato do dia; `--relatorio --dry-run` faz o mesmo numa cópia do banco em memória e só imprime.
+- **Formato** (seção 6): cabeçalho com o dia e as contagens (responder/realizar entre A Fazer e Em Andamento, atrasadas); "Feito ontem" (na segunda, "Feito desde sábado"); A Fazer com 🔴🟡🟢 ou ⚠️ "(há N dias)"; Em Andamento e Aguardando só quando têm itens; Oportunidades da janela por aderência; foco do dia; avisos.
+- **Prazos**: "(hoje)", "(amanhã)", "(até qua 04/11)", "(venceu 02/11)".
+- **Foco do dia** sem IA: a tarefa aberta com prazo vencido ou de hoje; senão a atrasada; senão a de maior prioridade.
+- **Conta no item** só aparece com mais de uma conta configurada.
+- **Avisos**: falha ao ler uma conta e e-mails classificados pelas regras (sem IA) aparecem no fim do relatório.
+- **Limite do Telegram** (4.096 caracteres): o texto é dividido entre seções. Títulos passam por escape de HTML.
+- A linha de comandos do exemplo (`/feito 12 · /nova texto · /quadro`) entra na Fase 6, junto com os comandos.
+- O log do httpx fica em WARNING: no nível INFO ele registrava a URL com o token do bot.
+

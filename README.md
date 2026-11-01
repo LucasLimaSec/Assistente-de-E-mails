@@ -173,6 +173,18 @@ Regras do quadro:
 - **Volta para A Fazer**: tarefa em Aguardando ou Feito que recebe e-mail novo na conversa.
 - **Atraso**: ⚠️ em tarefa parada em A Fazer há mais de `kanban.dias_para_atraso` dias úteis.
 
+### 8. Receber o relatório no Telegram
+
+```bash
+# Mostra o relatório no terminal sem enviar nem gravar nada (roda numa cópia do banco em memória)
+docker compose run --rm assistente-email python main.py --relatorio --dry-run
+
+# Fluxo completo: coleta, análise, quadro e envio ao Telegram
+docker compose run --rm assistente-email python main.py --relatorio
+```
+
+O relatório traz o resumo no topo, o que foi feito desde o último relatório, as colunas do quadro (até `kanban.max_itens_por_coluna` itens cada, o resto como "+N"), as oportunidades por aderência, o foco do dia e avisos de falha. Na Fase 7 ele passa a sair sozinho às 08:00.
+
 ## Configuração
 
 As preferências ficam no [`config.yaml`](config.yaml); os segredos, só no `.env`.
@@ -220,8 +232,10 @@ O plano completo, as decisões e as convenções do projeto estão no [`CLAUDE.m
 │   ├── fluxo.py         # coleta → análise → quadro
 │   ├── janela.py        # período coberto por cada relatório
 │   ├── kanban.py        # regras do quadro: mover, deduplicar, atraso, retrato do dia
+│   ├── report.py        # monta a mensagem do relatório (HTML do Telegram)
 │   ├── llm/             # provedores de IA: regras, ollama e claude
 │   ├── storage.py       # schema e conexão SQLite
+│   ├── telegram_bot.py  # envio pelo bot
 │   └── verificacao.py   # testes de chaves e conexões
 ├── prompts/             # prompts da IA, editáveis sem mexer no código
 └── tests/               # pytest e e-mails fictícios (tests/fixtures)

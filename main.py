@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import sqlite3
 import sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -242,19 +243,80 @@ def atualizar(caminho_config: str, horas: int | None, provedor: str | None) -> i
         kanban.salvar_snapshot(conn, agora.date(), colunas)
         imprimir_quadro(colunas)
 
-        # Datas gravadas com fusos diferentes: a comparação é feita em Python, não no texto.
-        oportunidades = sorted(
-            (o for o in conn.execute("SELECT titulo, aderencia, data FROM emails WHERE categoria = 'oportunidade'")
-             if datetime.fromisoformat(o["data"]) >= inicio),
-            key=lambda o: -o["aderencia"])
+        oportunidades = kanban.oportunidades(conn, inicio)
         print(f"\n💼 OPORTUNIDADES NA JANELA ({len(oportunidades)})")
-        for o in oportunidades:
-            print(f"• {o['aderencia']:>2}/10 {o['titulo']}")
+        for titulo, aderencia in oportunidades:
+            print(f"• {aderencia:>2}/10 {titulo}")
         for erro in r.erros:
             print(f"[AVISO] {erro}")
         return 1 if r.coleta.erros else 0
     finally:
         conn.close()
+
+
+def relatorio(caminho_config: str, horas: int | None, provedor: str | None, dry_run: bool) -> int:
+    """Fluxo diário completo: coleta, análise, quadro e envio do relatório ao Telegram.
+
+    Com --dry-run tudo roda numa cópia do banco em memória: nada é gravado nem enviado.
+    """
+    from src import report
+    from src.fluxo import atualizar_quadro
+    from src.telegram_bot import ErroTelegram, enviar
+
+    cfg = carregar_valido(caminho_config)
+    if cfg is None:
+        return 1
+    if provedor:
+        cfg["llm"]["provider"] = provedor
+    agora = agora_local(cfg)
+    ultimo_relatorio = inicio_janela(agora, cfg)
+    inicio = agora - timedelta(hours=horas) if horas else ultimo_relatorio
+    print(f"Janela: {formatar_data(inicio)} → {formatar_data(agora)}"
+          f"{' (dry-run: nada é gravado nem enviado)' if dry_run else ''}")
+
+    banco = abrir_banco(cfg)
+    conn = banco
+    if dry_run:
+        conn = sqlite3.connect(":memory:")
+        banco.backup(conn)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        r = atualizar_quadro(cfg, conn, inicio, agora)
+        colunas = kanban.quadro(conn, agora, cfg, ultimo_relatorio)
+        dados = report.DadosRelatorio(
+            agora=agora, desde=ultimo_relatorio, colunas=colunas,
+            oportunidades=[report.Oportunidade(t, a) for t, a in kanban.oportunidades(conn, inicio)],
+            avisos=avisos_do_fluxo(r, cfg), marcar_conta=len(cfg["contas"]) > 1)
+        texto = report.montar(dados, cfg["kanban"]["max_itens_por_coluna"],
+                              (cfg.get("oportunidades") or {}).get("max_no_relatorio", 5))
+        if dry_run:
+            print("\n" + texto)
+            return 0
+        try:
+            partes = enviar(texto)
+        except ErroTelegram as e:
+            print(f"[FALHA] Telegram: {e}\n\n{texto}")
+            return 1
+        kanban.salvar_snapshot(conn, agora.date(), colunas)
+        print(f"Relatório enviado ao Telegram ({partes} mensagem(ns)).")
+        return 0
+    finally:
+        if conn is not banco:
+            conn.close()
+        banco.close()
+
+
+def avisos_do_fluxo(r, cfg: dict) -> list[str]:
+    """Avisos curtos para o fim do relatório: o bot não fica em silêncio quando algo falha."""
+    avisos = []
+    for erro in r.coleta.erros:
+        avisos.append(f"Falha ao ler e-mails: {erro[:150]}")
+    if r.analise:
+        sem_ia = r.analise.por_provedor.get("regras", 0)
+        if sem_ia and cfg["llm"]["provider"] != "regras":
+            avisos.append(f"{sem_ia} e-mail(s) classificado(s) sem IA, pelas regras.")
+    return avisos
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -268,13 +330,17 @@ def main(argv: list[str] | None = None) -> int:
                         help="mede tempo, memória e acertos da IA com os e-mails fictícios")
     parser.add_argument("--atualizar-quadro", action="store_true",
                         help="coleta, analisa e GRAVA no quadro (não reanalisa e-mails já processados)")
+    parser.add_argument("--relatorio", action="store_true",
+                        help="fluxo diário completo: coleta, análise, quadro e envio ao Telegram")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="com --relatorio: mostra o relatório no terminal sem enviar nem gravar nada")
     parser.add_argument("--quadro", action="store_true", help="mostra o quadro atual")
     parser.add_argument("--mover", nargs=2, metavar=("N", "COLUNA"),
                         help="move a tarefa N para a coluna (a_fazer, em_andamento, aguardando, feito)")
     parser.add_argument("--provedor", choices=["regras", "ollama", "claude"],
                         help="com --analisar, --atualizar-quadro ou --benchmark-ia: usa este provedor")
     parser.add_argument("--horas", type=int,
-                        help="com --emails, --analisar ou --atualizar-quadro: últimas N horas em vez da janela")
+                        help="com --emails, --analisar, --atualizar-quadro ou --relatorio: últimas N horas em vez da janela")
     parser.add_argument("--descartados", action="store_true",
                         help="com --emails: lista também os descartados e o motivo")
     parser.add_argument("--corpo", action="store_true",
@@ -294,6 +360,8 @@ def main(argv: list[str] | None = None) -> int:
         return listar_emails(args.config, args.horas, args.descartados, args.corpo)
     if args.analisar:
         return analisar_emails(args.config, args.horas, args.provedor)
+    if args.relatorio or args.dry_run:
+        return relatorio(args.config, args.horas, args.provedor, args.dry_run)
     if args.atualizar_quadro:
         return atualizar(args.config, args.horas, args.provedor)
     if args.quadro:
@@ -305,8 +373,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg = carregar_valido(args.config)
         return rodar(cfg, args.provedor) if cfg else 1
 
-    print("O envio ao Telegram ainda não foi implementado (Fase 5 em diante). Use --check, --emails, "
-          "--analisar, --atualizar-quadro, --quadro, --mover ou --benchmark-ia.")
+    print("O agendamento automático chega na Fase 7. Use --relatorio (ou --relatorio --dry-run), --check, "
+          "--emails, --analisar, --atualizar-quadro, --quadro, --mover ou --benchmark-ia.")
     return 2
 
 

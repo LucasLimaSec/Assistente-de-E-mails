@@ -283,6 +283,15 @@ def _ultimo_recebido(conn: sqlite3.Connection, tarefa_id: int) -> datetime:
     return max(datas) if datas else datetime.min.replace(tzinfo=timezone.utc)
 
 
+def oportunidades(conn: sqlite3.Connection, desde: datetime) -> list[tuple[str, int]]:
+    """(título, aderência) das oportunidades recebidas desde `desde`, da maior aderência para a menor."""
+    # Datas gravadas com fusos diferentes: a comparação é feita em Python, não no texto.
+    linhas = [(l["titulo"] or l["assunto"], l["aderencia"]) for l in conn.execute(
+        "SELECT titulo, assunto, aderencia, data FROM emails WHERE categoria = 'oportunidade' AND enviado = 0")
+        if datetime.fromisoformat(l["data"]) >= desde]
+    return sorted(linhas, key=lambda o: -o[1])
+
+
 # --- atraso e quadro ----------------------------------------------------------------------------
 
 def dias_uteis_entre(inicio: date, fim: date, dias_uteis: set[int]) -> int:
