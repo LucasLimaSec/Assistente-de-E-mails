@@ -216,8 +216,8 @@ O plano completo, as decisões e as convenções do projeto estão no [`CLAUDE.m
 ## Roteiro
 
 - [x] **Fase 1 – Base**: estrutura, config, banco SQLite, container e `--check`
-- [ ] **Fase 2 – E-mail**: coleta e filtros
-- [ ] **Fase 3 – IA**: provedores `ollama`, `regras` e `claude`, benchmark no servidor e registro de tokens
+- [x] **Fase 2 – E-mail**: coleta e filtros
+- [x] **Fase 3 – IA**: provedores `ollama`, `regras` e `claude`, benchmark no servidor e registro de tokens
 - [ ] **Fase 4 – Kanban**: mover, deduplicar e marcar atraso
 - [ ] **Fase 5 – Telegram (envio)**: relatório diário
 - [ ] **Fase 6 – Telegram (comandos)**: `/feito`, `/nova`, `/quadro`, `/rascunho`, notas, agenda e resumo semanal

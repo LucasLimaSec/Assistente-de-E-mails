@@ -276,3 +276,5 @@ O 99Freelas manda ~14 projetos por dia; virar uma tarefa por projeto encheria o 
 Regras que o config impõe sobre a IA: `vip` vira sempre tarefa Alta; e-mail de fonte que a IA chamar de tarefa vira oportunidade; "oportunidade" vinda de uma pessoa (fora das fontes) vira tarefa de responder.
 
 **Aprendizado do teste real com Ollama (30/10/2026)**: um modelo pequeno pode entrar em loop gerando itens no JSON até estourar o contexto (6,5 min perdidos num lote). Cada chamada tem teto de saída (`num_predict` = 200 + 150 por e-mail); resposta cortada vira erro, nova tentativa e depois `regras`.
+
+**Benchmark no servidor (31/10/2026)**: `qwen3.5:4b`, lotes de 6, acertou 10 de 10 no gabarito (categoria, tipo, prioridade e aderência). 56 s por e-mail (~28 min para 30 e-mails, folga grande na janela de 05:30 a 07:55), 1,6 tokens/s na saída e 3,1 GB de RAM. Rascunho sob demanda em ~76 s. Decisão: fica o `qwen3.5:4b` com `lote_emails: 6`. Ajuste feito: o prompt de rascunho pedia de volta os dados mascarados como `[número]`; agora ele sabe que são dados ocultados.
