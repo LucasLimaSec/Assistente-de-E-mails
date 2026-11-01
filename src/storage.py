@@ -6,7 +6,7 @@ Datas são gravadas como texto ISO 8601 com fuso (ex.: 2026-10-29T07:00:00-03:00
 import sqlite3
 from pathlib import Path
 
-VERSAO_SCHEMA = 1
+VERSAO_SCHEMA = 2
 
 SCHEMA = """
 CREATE TABLE tarefas (
@@ -39,6 +39,9 @@ CREATE TABLE emails (
     data        TEXT NOT NULL,
     enviado     INTEGER NOT NULL DEFAULT 0,   -- 1 = veio da pasta de enviados
     tarefa_id   INTEGER REFERENCES tarefas (id),
+    categoria   TEXT,               -- tarefa | oportunidade | informativo (resultado da análise)
+    titulo      TEXT,               -- título dado pela análise (oportunidades e informativos)
+    aderencia   INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (conta, message_id)
 );
 CREATE INDEX idx_emails_conversa ON emails (conversa);
@@ -94,13 +97,25 @@ def conectar(caminho: str | Path) -> sqlite3.Connection:
     return conn
 
 
+# Mudanças aplicadas em bancos já existentes: versão -> comandos para chegar nela.
+MIGRACOES = {
+    2: """
+ALTER TABLE emails ADD COLUMN categoria TEXT;
+ALTER TABLE emails ADD COLUMN titulo TEXT;
+ALTER TABLE emails ADD COLUMN aderencia INTEGER NOT NULL DEFAULT 0;
+""",
+}
+
+
 def inicializar(conn: sqlite3.Connection) -> None:
     versao = conn.execute("PRAGMA user_version").fetchone()[0]
     if versao >= VERSAO_SCHEMA:
         return
-    with conn:
-        conn.executescript(SCHEMA)
-        conn.execute(f"PRAGMA user_version = {VERSAO_SCHEMA}")
+    if versao == 0:
+        conn.executescript("BEGIN;" + SCHEMA + f"PRAGMA user_version = {VERSAO_SCHEMA}; COMMIT;")
+        return
+    for alvo in range(versao + 1, VERSAO_SCHEMA + 1):
+        conn.executescript("BEGIN;" + MIGRACOES[alvo] + f"PRAGMA user_version = {alvo}; COMMIT;")
 
 
 def tabelas(conn: sqlite3.Connection) -> list[str]:

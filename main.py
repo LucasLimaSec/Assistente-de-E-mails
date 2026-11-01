@@ -9,7 +9,8 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from src.ai_analyzer import analisar, montar_contexto
-from src.config import carregar_config, validar_config
+from src import kanban, storage
+from src.config import caminho_banco, carregar_config, validar_config
 from src.email_reader import Coleta, coletar
 from src.janela import inicio_janela
 from src.verificacao import verificar_tudo
@@ -151,6 +152,111 @@ def analisar_emails(caminho_config: str, horas: int | None, provedor: str | None
     return 1 if sem_analise else 0
 
 
+MARCA_TIPO = {"responder": "Responder", "realizar": "Realizar"}
+
+
+def imprimir_quadro(colunas: dict[str, list[kanban.Tarefa]]) -> None:
+    """Quadro completo no terminal (o formato do Telegram, com limite por coluna, vem na Fase 5)."""
+    for coluna, titulo in (("a_fazer", "📋 A FAZER"), ("em_andamento", "🔄 EM ANDAMENTO"),
+                           ("aguardando", "⏳ AGUARDANDO"), ("feito", "✅ FEITO DESDE O ÚLTIMO RELATÓRIO")):
+        tarefas = colunas[coluna]
+        print(f"\n{titulo} ({len(tarefas)})")
+        for t in tarefas:
+            marca = "⚠️" if t.atrasada else PRIORIDADE_MARCA[t.prioridade]
+            extras = []
+            if t.prazo:
+                extras.append(f"prazo {t.prazo}{' VENCIDO' if t.prazo_vencido else ''}")
+            if t.atrasada:
+                extras.append(f"há {t.dias_parada} dias úteis")
+            if t.conta:
+                extras.append(t.conta)
+            detalhe = f"  ({', '.join(extras)})" if extras else ""
+            print(f"{marca} #{t.id} {MARCA_TIPO[t.tipo]}: {t.titulo}{detalhe}")
+
+
+def abrir_banco(cfg: dict):
+    return storage.conectar(caminho_banco(cfg))
+
+
+def agora_local(cfg: dict) -> datetime:
+    return datetime.now(ZoneInfo(cfg["geral"]["fuso_horario"]))
+
+
+def mostrar_quadro(caminho_config: str) -> int:
+    cfg = carregar_valido(caminho_config)
+    if cfg is None:
+        return 1
+    agora = agora_local(cfg)
+    conn = abrir_banco(cfg)
+    try:
+        imprimir_quadro(kanban.quadro(conn, agora, cfg, inicio_janela(agora, cfg)))
+    finally:
+        conn.close()
+    return 0
+
+
+def mover_tarefa(caminho_config: str, numero: str, coluna: str) -> int:
+    cfg = carregar_valido(caminho_config)
+    if cfg is None:
+        return 1
+    conn = abrir_banco(cfg)
+    try:
+        movida = kanban.mover(conn, int(numero), coluna, agora_local(cfg), motivo="comando")
+        destino = kanban.NOMES_COLUNAS[kanban.coluna_valida(coluna)]
+        print(f"#{numero} movida para {destino}." if movida else f"#{numero} já estava em {destino}.")
+        return 0
+    except (kanban.ErroQuadro, ValueError) as e:
+        print(f"[FALHA] {e}")
+        return 1
+    finally:
+        conn.close()
+
+
+def atualizar(caminho_config: str, horas: int | None, provedor: str | None) -> int:
+    """Coleta, analisa e grava no quadro; depois mostra o quadro (ainda sem enviar ao Telegram)."""
+    from src.fluxo import atualizar_quadro
+
+    cfg = carregar_valido(caminho_config)
+    if cfg is None:
+        return 1
+    if provedor:
+        cfg["llm"]["provider"] = provedor
+    agora = agora_local(cfg)
+    inicio = agora - timedelta(hours=horas) if horas else inicio_janela(agora, cfg)
+    print(f"Janela: {formatar_data(inicio)} → {formatar_data(agora)} "
+          f"({(agora - inicio).total_seconds() / 3600:.0f} h)")
+    conn = abrir_banco(cfg)
+    try:
+        r = atualizar_quadro(cfg, conn, inicio, agora)
+        print(f"\n{len(r.coleta.emails)} e-mail(s) relevante(s): {r.ja_vistos} já processado(s), "
+              f"{r.anexados} anexado(s) a tarefas abertas sem IA, {r.para_ia} analisado(s); "
+              f"{len(r.coleta.enviados)} enviado(s) por você.")
+        if r.analise:
+            print(f"IA: {r.analise.segundos / 60:.1f} min, tokens {r.analise.tokens_entrada} entrada / "
+                  f"{r.analise.tokens_saida} saída, por provedor {r.analise.por_provedor}")
+        s = r.resumo
+        print(f"Quadro: {len(s.criadas)} criada(s), {len(s.atualizadas)} atualizada(s), "
+              f"{len(s.reabertas)} reaberta(s), {len(s.concluidas)} concluída(s) por resposta enviada.")
+
+        colunas = kanban.quadro(conn, agora, cfg, inicio_janela(agora, cfg))
+        kanban.salvar_snapshot(conn, agora.date(), colunas)
+        imprimir_quadro(colunas)
+
+        # Datas gravadas com fusos diferentes: a comparação é feita em Python, não no texto.
+        oportunidades = sorted(
+            (o for o in conn.execute("SELECT titulo, aderencia, data FROM emails WHERE categoria = 'oportunidade'")
+             if datetime.fromisoformat(o["data"]) >= inicio),
+            key=lambda o: -o["aderencia"])
+        print(f"\n💼 OPORTUNIDADES NA JANELA ({len(oportunidades)})")
+        for o in oportunidades:
+            print(f"• {o['aderencia']:>2}/10 {o['titulo']}")
+        for erro in r.erros:
+            print(f"[AVISO] {erro}")
+        return 1 if r.coleta.erros else 0
+    finally:
+        conn.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Assistente de E-mails")
     parser.add_argument("--check", action="store_true", help="valida config, chaves e conexões e cria o banco")
@@ -160,10 +266,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="coleta e analisa os e-mails com a IA, só mostrando o resultado (não grava nada)")
     parser.add_argument("--benchmark-ia", action="store_true",
                         help="mede tempo, memória e acertos da IA com os e-mails fictícios")
+    parser.add_argument("--atualizar-quadro", action="store_true",
+                        help="coleta, analisa e GRAVA no quadro (não reanalisa e-mails já processados)")
+    parser.add_argument("--quadro", action="store_true", help="mostra o quadro atual")
+    parser.add_argument("--mover", nargs=2, metavar=("N", "COLUNA"),
+                        help="move a tarefa N para a coluna (a_fazer, em_andamento, aguardando, feito)")
     parser.add_argument("--provedor", choices=["regras", "ollama", "claude"],
-                        help="com --analisar ou --benchmark-ia: usa este provedor em vez do llm.provider")
+                        help="com --analisar, --atualizar-quadro ou --benchmark-ia: usa este provedor")
     parser.add_argument("--horas", type=int,
-                        help="com --emails ou --analisar: usa as últimas N horas em vez da janela do relatório")
+                        help="com --emails, --analisar ou --atualizar-quadro: últimas N horas em vez da janela")
     parser.add_argument("--descartados", action="store_true",
                         help="com --emails: lista também os descartados e o motivo")
     parser.add_argument("--corpo", action="store_true",
@@ -180,13 +291,19 @@ def main(argv: list[str] | None = None) -> int:
         return listar_emails(args.config, args.horas, args.descartados, args.corpo)
     if args.analisar:
         return analisar_emails(args.config, args.horas, args.provedor)
+    if args.atualizar_quadro:
+        return atualizar(args.config, args.horas, args.provedor)
+    if args.quadro:
+        return mostrar_quadro(args.config)
+    if args.mover:
+        return mover_tarefa(args.config, *args.mover)
     if args.benchmark_ia:
         from src.benchmark import rodar
         cfg = carregar_valido(args.config)
         return rodar(cfg, args.provedor) if cfg else 1
 
-    print("O fluxo diário ainda não foi implementado (Fase 4 em diante). "
-          "Use --check, --emails, --analisar ou --benchmark-ia.")
+    print("O envio ao Telegram ainda não foi implementado (Fase 5 em diante). Use --check, --emails, "
+          "--analisar, --atualizar-quadro, --quadro, --mover ou --benchmark-ia.")
     return 2
 
 

@@ -69,9 +69,21 @@ class Descartado:
 
 
 @dataclass
+class Enviado:
+    """E-mail que você enviou: se responde uma tarefa "Responder", ela vai para Feito."""
+    conta: str
+    message_id: str
+    conversa: str
+    responde_a: str      # In-Reply-To
+    assunto: str
+    data: datetime
+
+
+@dataclass
 class Coleta:
     emails: list[Email] = field(default_factory=list)
     descartados: list[Descartado] = field(default_factory=list)
+    enviados: list[Enviado] = field(default_factory=list)
     erros: list[str] = field(default_factory=list)
 
 
@@ -93,6 +105,7 @@ def coletar(cfg: dict, inicio: datetime, fim: datetime) -> Coleta:
         except (imaplib.IMAP4.error, OSError) as e:
             coleta.erros.append(f"[{nome}] {e}")
     coleta.emails.sort(key=lambda e: e.data)
+    coleta.enviados.sort(key=lambda e: e.data)
     return coleta
 
 
@@ -134,11 +147,59 @@ def coletar_conta(conta: dict, endereco: str, senha: str, inicio: datetime, fim:
         for uid, _, bruto in baixar(imap, list(manter), f"(BODY.PEEK[]<0.{LIMITE_BYTES}>)"):
             msg = email.message_from_bytes(bruto, policy=policy.default)
             coleta.emails.append(montar_email(msg, conta["nome"], uid, manter[uid], filtros, max_chars))
+
+        # Enviados: um erro aqui não descarta a caixa de entrada já lida.
+        try:
+            coletar_enviados(imap, conta["nome"], inicio, fim, coleta)
+        except (imaplib.IMAP4.error, OSError) as e:
+            coleta.erros.append(f"[{conta['nome']}] pasta de enviados: {e}")
     finally:
         try:
             imap.logout()
         except (imaplib.IMAP4.error, OSError):
             pass
+
+
+_LINHA_LIST = re.compile(rb'^\((?P<flags>[^)]*)\) (?:"[^"]*"|NIL) (?P<nome>.+)$')
+
+
+def pasta_enviados(imap) -> str | None:
+    """Pasta marcada como \\Sent no LIST (no Gmail em português: "[Gmail]/E-mails enviados")."""
+    status, linhas = imap.list()
+    if status != "OK":
+        return None
+    for linha in linhas or []:
+        if isinstance(linha, tuple):  # nome em literal: raro, ignora
+            continue
+        achado = _LINHA_LIST.match(linha or b"")
+        if achado and b"\\sent" in achado.group("flags").lower():
+            # Devolve como veio (com aspas, se houver), pronto para o SELECT.
+            return achado.group("nome").decode()
+    return None
+
+
+def coletar_enviados(imap, nome_conta: str, inicio: datetime, fim: datetime, coleta: Coleta) -> None:
+    pasta = pasta_enviados(imap)
+    if pasta is None:
+        return
+    status, _ = imap.select(pasta, readonly=True)
+    if status != "OK":
+        raise imaplib.IMAP4.error(f"não foi possível abrir {pasta}")
+    uids = buscar(imap, "SINCE", data_imap(inicio))
+    campos = "(INTERNALDATE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID IN-REPLY-TO REFERENCES SUBJECT)])"
+    for uid, enviado_em, bruto in baixar(imap, uids, campos):
+        if not inicio <= enviado_em < fim:
+            continue
+        msg = email.message_from_bytes(bruto, policy=policy.default)
+        message_id = str(msg.get("Message-ID", "")).strip() or f"<enviado-{uid}@{nome_conta}>"
+        coleta.enviados.append(Enviado(
+            conta=nome_conta,
+            message_id=message_id,
+            conversa=raiz_conversa(msg, message_id),
+            responde_a=str(msg.get("In-Reply-To", "")).strip(),
+            assunto=assunto_de(msg),
+            data=enviado_em,
+        ))
 
 
 def buscar(imap, *criterios: str) -> list[str]:

@@ -280,3 +280,15 @@ Regras que o config impõe sobre a IA: `vip` vira sempre tarefa Alta; e-mail de 
 **Benchmark no servidor (31/10/2026)**: `qwen3.5:4b`, lotes de 6, acertou 10 de 10 no gabarito (categoria, tipo, prioridade e aderência). 56 s por e-mail (~28 min para 30 e-mails, folga grande na janela de 05:30 a 07:55), 1,6 tokens/s na saída e 3,1 GB de RAM. Rascunho sob demanda em ~76 s. Decisão: fica o `qwen3.5:4b` com `lote_emails: 6`. Ajuste feito: o prompt de rascunho pedia de volta os dados mascarados como `[número]`; agora ele sabe que são dados ocultados.
 
 **Avisos do 99Freelas (31/10/2026)**: só o trecho do projeto (título, categoria, nível, orçamento, descrição e habilidades) vai para a IA; saudação com o nome, links e rodapé são cortados (`recortar_aviso` em email_reader.py). Se o formato mudar e o marcador não for achado, o e-mail vai inteiro, como antes. A Workana ganha o mesmo recorte quando chegar um aviso real para ver o formato (`--emails --corpo`).
+
+## 15. Quadro Kanban (Fase 4, 01/11/2026)
+
+- **Deduplicação**, da pista mais forte para a mais fraca: mesma conversa (References/In-Reply-To); tarefa aberta apontada pela IA (`tarefa_existente`); mesmo remetente com o mesmo assunto sem `Re:`/`Fwd:`. Mesmo assunto vindo de outra pessoa é outra tarefa. O título da tarefa não muda; a prioridade só sobe e o prazo novo substitui o antigo.
+- **Conversa com tarefa aberta não passa pela IA**: o e-mail é só anexado (economiza o modelo lento). Conversa de tarefa em Feito passa pela IA: se for um novo pedido, a tarefa é reaberta com o mesmo número; um "obrigado" (informativo) não reabre.
+- **Aguardando**: só entra por comando; volta para A Fazer quando chega e-mail na conversa.
+- **E-mail enviado**: lido da pasta marcada como `\Sent` (somente leitura). Uma resposta na conversa de uma tarefa "Responder" em A Fazer ou Em Andamento, enviada depois do último e-mail recebido dela, move a tarefa para Feito. Tarefas "Realizar" só saem por comando.
+- **Atraso**: só em A Fazer, contando dias úteis (`geral.dias_uteis`) desde a entrada na coluna; atrasada com **mais de** `dias_para_atraso` (criada na segunda, atrasada na sexta). Mover a tarefa recomeça a contagem. Prazo passado aparece como vencido.
+- **Feito no relatório**: só o que foi concluído desde o início da janela (relatório do último dia útil).
+- **Banco v2**: a tabela `emails` guarda também categoria, título e aderência, para o relatório listar as oportunidades. Bancos v1 migram sozinhos.
+- **Idempotente**: e-mail já registrado não é analisado de novo, então dá para rodar `--atualizar-quadro` várias vezes. Cada rodada fica em `execucoes` com os tokens gastos.
+

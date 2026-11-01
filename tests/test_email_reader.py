@@ -29,34 +29,50 @@ CAIXA = {
     # Mesmo dia do SINCE, mas antes do início da janela: deve ser ignorado.
     "10": ("29-Oct-2026 23:30:00 -0300", "pessoal_orcamento.eml"),
 }
+ENVIADOS = {
+    "71": ("30-Oct-2026 15:00:00 -0300", "enviado_resposta.eml"),
+    "70": ("29-Oct-2026 18:00:00 -0300", "enviado_resposta.eml"),   # antes da janela
+}
+PASTA_ENVIADOS = '"[Gmail]/E-mails enviados"'
 
 
 class FakeIMAP:
     """Imita as respostas do imaplib para SEARCH e FETCH."""
 
-    def __init__(self, gmail=True, promocoes=()):
+    def __init__(self, gmail=True, promocoes=(), com_enviados=True):
         self.capabilities = ("IMAP4REV1", "X-GM-EXT-1") if gmail else ("IMAP4REV1",)
         self.promocoes = list(promocoes)
+        self.com_enviados = com_enviados
         self.comandos = []
         self.readonly = None
+        self.abertas = []
+        self.caixa = CAIXA
         self.saiu = False
+
+    def list(self):
+        linhas = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasChildren \\Noselect) "/" "[Gmail]"']
+        if self.com_enviados:
+            linhas.append(b'(\\HasNoChildren \\Sent) "/" ' + PASTA_ENVIADOS.encode())
+        return "OK", linhas
 
     def login(self, usuario, senha):
         return "OK", [b"logado"]
 
     def select(self, caixa, readonly=False):
         self.readonly = readonly
-        return "OK", [str(len(CAIXA)).encode()]
+        self.abertas.append((caixa, readonly))
+        self.caixa = ENVIADOS if caixa == PASTA_ENVIADOS else CAIXA
+        return "OK", [str(len(self.caixa)).encode()]
 
     def uid(self, comando, *args):
         self.comandos.append((comando, args))
         if comando == "SEARCH":
-            uids = self.promocoes if args[0] == "X-GM-RAW" else list(CAIXA)
+            uids = self.promocoes if args[0] == "X-GM-RAW" else list(self.caixa)
             return "OK", [" ".join(uids).encode()]
         uids, partes = args
         dados = []
         for uid in uids.split(","):
-            interno, arquivo = CAIXA[uid]
+            interno, arquivo = self.caixa[uid]
             bruto = (FIXTURES / arquivo).read_bytes()
             if "HEADER" in partes:
                 conteudo = bruto.split(b"\n\n", 1)[0] + b"\n\n"
@@ -89,7 +105,7 @@ def motivos(coleta):
 
 def test_somente_leitura():
     _, imap = rodar()
-    assert imap.readonly is True
+    assert imap.abertas == [("INBOX", True), (PASTA_ENVIADOS, True)]
     fetches = [args[1] for comando, args in imap.comandos if comando == "FETCH"]
     assert fetches and all("PEEK" in partes for partes in fetches)
     assert imap.saiu
@@ -274,3 +290,19 @@ def test_recorta_aviso_do_99freelas_sem_nome_nem_rodape():
 def test_recorte_nao_afeta_outros_remetentes_nem_formato_desconhecido():
     assert recortar_aviso(AVISO_99FREELAS, "maria@example.com") == AVISO_99FREELAS
     assert recortar_aviso("Texto em outro formato", "no-reply@99freelas.com.br") == "Texto em outro formato"
+
+
+def test_le_enviados_da_janela_para_concluir_tarefas():
+    coleta, _ = rodar()
+    assert len(coleta.enviados) == 1
+    s = coleta.enviados[0]
+    assert (s.message_id, s.conversa, s.responde_a) == ("<resposta-3@example.org>", "<original-1@example.org>",
+                                                        "<resposta-2@example.com>")
+    # Mesma conversa do e-mail da Maria recebido.
+    assert por_assunto(coleta)["Re: Aprovar orçamento do projeto"].conversa == s.conversa
+
+
+def test_sem_pasta_de_enviados_segue_normal():
+    coleta, imap = rodar(com_enviados=False)
+    assert coleta.enviados == [] and not coleta.erros and len(coleta.emails) == 2
+    assert imap.abertas == [("INBOX", True)]

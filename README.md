@@ -152,6 +152,27 @@ docker compose run --rm assistente-email python main.py --analisar --horas 24
 
 Com `--provedor regras` ou `--provedor claude` dá para comparar com os outros provedores. Se o benchmark mostrar que o servidor é lento demais, troque `llm.ollama.model` por `qwen3.5:2b` ou diminua `llm.lote_emails`.
 
+Para ver exatamente o texto que a IA recebe de cada e-mail, use `--emails --corpo`.
+
+### 7. Montar o quadro Kanban
+
+```bash
+# Coleta, analisa e GRAVA no quadro. Rodar de novo não reanalisa os e-mails já processados.
+docker compose run --rm assistente-email python main.py --atualizar-quadro --horas 24
+
+# Mostra o quadro e move tarefas (as mesmas ações do /feito no Telegram, que chega na Fase 6)
+docker compose run --rm assistente-email python main.py --quadro
+docker compose run --rm assistente-email python main.py --mover 3 feito
+```
+
+Regras do quadro:
+
+- **Colunas**: A Fazer, Em Andamento, Aguardando e Feito. Cada tarefa tem um número fixo.
+- **Sem duplicar**: e-mail da mesma conversa, ou do mesmo remetente com o mesmo assunto (sem `Re:`/`Fwd:`), atualiza a tarefa existente. Conversa com tarefa aberta nem passa pela IA.
+- **Resposta enviada**: se você responde a conversa de uma tarefa "Responder", ela vai sozinha para Feito (lido da pasta de enviados, também só leitura).
+- **Volta para A Fazer**: tarefa em Aguardando ou Feito que recebe e-mail novo na conversa.
+- **Atraso**: ⚠️ em tarefa parada em A Fazer há mais de `kanban.dias_para_atraso` dias úteis.
+
 ## Configuração
 
 As preferências ficam no [`config.yaml`](config.yaml); os segredos, só no `.env`.
@@ -186,7 +207,7 @@ O plano completo, as decisões e as convenções do projeto estão no [`CLAUDE.m
 ## Estrutura do projeto
 
 ```
-├── main.py              # ponto de entrada (--check, --emails, --analisar, --benchmark-ia)
+├── main.py              # ponto de entrada (--check, --emails, --analisar, --atualizar-quadro, --quadro...)
 ├── config.yaml          # preferências
 ├── .env.example         # modelo das variáveis secretas
 ├── Dockerfile
@@ -195,8 +216,10 @@ O plano completo, as decisões e as convenções do projeto estão no [`CLAUDE.m
 │   ├── ai_analyzer.py   # lotes, novas tentativas, reserva e regras do config sobre a IA
 │   ├── benchmark.py     # --benchmark-ia
 │   ├── config.py        # leitura e validação do config.yaml
-│   ├── email_reader.py  # coleta IMAP, filtros e limpeza do corpo
+│   ├── email_reader.py  # coleta IMAP (entrada e enviados), filtros e limpeza do corpo
+│   ├── fluxo.py         # coleta → análise → quadro
 │   ├── janela.py        # período coberto por cada relatório
+│   ├── kanban.py        # regras do quadro: mover, deduplicar, atraso, retrato do dia
 │   ├── llm/             # provedores de IA: regras, ollama e claude
 │   ├── storage.py       # schema e conexão SQLite
 │   └── verificacao.py   # testes de chaves e conexões
