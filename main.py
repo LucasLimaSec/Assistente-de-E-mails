@@ -57,7 +57,8 @@ def coletar_janela(cfg: dict, horas: int | None) -> tuple[Coleta, datetime]:
     return coletar(cfg, inicio, agora), agora
 
 
-def listar_emails(caminho_config: str, horas: int | None, mostrar_descartados: bool) -> int:
+def listar_emails(caminho_config: str, horas: int | None, mostrar_descartados: bool,
+                  corpo_completo: bool = False) -> int:
     cfg = carregar_valido(caminho_config)
     if cfg is None:
         return 1
@@ -70,6 +71,10 @@ def listar_emails(caminho_config: str, horas: int | None, mostrar_descartados: b
         remetente = f"{e.remetente_nome} <{e.remetente}>" if e.remetente_nome else e.remetente
         print(f"\n{marca} [{e.conta}] {formatar_data(e.data.astimezone(fuso))}  {remetente}")
         print(f"  Assunto: {e.assunto}")
+        if corpo_completo:
+            # Exatamente o texto que a IA recebe (já limpo, mascarado e truncado).
+            print("  " + e.corpo.replace("\n", "\n  "))
+            continue
         resumo = " ".join(e.corpo.split())
         print(f"  {resumo[:160]}{'…' if len(resumo) > 160 else ''}")
 
@@ -161,6 +166,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="com --emails ou --analisar: usa as últimas N horas em vez da janela do relatório")
     parser.add_argument("--descartados", action="store_true",
                         help="com --emails: lista também os descartados e o motivo")
+    parser.add_argument("--corpo", action="store_true",
+                        help="com --emails: mostra o corpo inteiro, exatamente como a IA recebe")
     parser.add_argument("--config", default="config.yaml", help="caminho do config.yaml")
     args = parser.parse_args(argv)
 
@@ -170,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         return checar(args.config)
     if args.emails:
-        return listar_emails(args.config, args.horas, args.descartados)
+        return listar_emails(args.config, args.horas, args.descartados, args.corpo)
     if args.analisar:
         return analisar_emails(args.config, args.horas, args.provedor)
     if args.benchmark_ia:

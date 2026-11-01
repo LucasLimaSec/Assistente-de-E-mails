@@ -8,7 +8,7 @@ Você recebe e-mails numerados. Para cada um, devolva um item com o mesmo "id" e
 - categoria:
   - "tarefa": pede uma ação ou resposta dele. Exemplos: cliente ou contato pessoal escrevendo, orçamento, cobrança, reunião, alerta de segurança da conta.
   - "oportunidade": oferta de projeto ou trabalho, como avisos de sites de freelancer e vagas.
-  - "informativo": aviso, propaganda ou notificação que não pede nenhuma ação.
+  - "informativo": aviso, propaganda ou notificação que não pede nenhuma ação. Exemplos: extrato disponível, newsletter, resposta automática de ausência ou férias.
 - tipo: "responder" se ele precisa escrever de volta; "realizar" se precisa fazer algo (pagar, revisar, conferir um acesso). Em oportunidades e informativos, use "realizar".
 - prioridade:
   - "alta": prazo hoje ou amanhã, dinheiro envolvido, segurança da conta ou cliente esperando resposta.
@@ -21,7 +21,7 @@ Você recebe e-mails numerados. Para cada um, devolva um item com o mesmo "id" e
 - prazo: data no formato AAAA-MM-DD se o e-mail citar um prazo; senão "".
 - aderencia: só em oportunidades, de 0 a 10, o quanto o projeto combina com o perfil profissional acima. Use 0 nas outras categorias. Escala:
   - 9 a 10: o trabalho principal do projeto é a área principal do perfil (a primeira parte dele).
-  - 6 a 8: o projeto pede as tecnologias citadas no perfil ou envolve segurança, mas não é a área principal.
+  - 6 a 8: o e-mail cita pelo nome uma tecnologia do perfil (ex.: Python) ou o projeto tem uma parte de segurança, mas não é a área principal. IA, automação, n8n, WhatsApp ou "sistema web" sozinhos não contam como tecnologia do perfil.
   - 3 a 5: desenvolvimento de software em outra área, sem as tecnologias do perfil.
   - 0 a 2: outra profissão (design, marketing, redação, vendas etc.).
   Uma palavra em comum com o perfil não basta: avalie o trabalho que será feito. Na dúvida entre duas faixas, use a menor.
