@@ -10,3 +10,5 @@ resposta_automatica.eml: {categoria: informativo}
 freelancer.eml: {categoria: oportunidade}
 projeto_pentest.eml: {categoria: oportunidade, aderencia_min: 6}
 projeto_logo.eml: {categoria: oportunidade, aderencia_max: 3}
+# Projeto vizinho (IA, API) mas fora da área de segurança: a nota não pode inflar por palavra em comum.
+projeto_automacao.eml: {categoria: oportunidade, aderencia_max: 5}
