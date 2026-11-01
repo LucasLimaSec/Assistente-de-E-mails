@@ -313,3 +313,14 @@ Regras que o config impõe sobre a IA: `vip` vira sempre tarefa Alta; e-mail de 
 - **Resumo semanal**: `--resumo-semanal` (com `--dry-run`) e `/semana`. Semana = segunda 00:00 até agora: concluídas (até 10), pendentes, 3 mais atrasadas, notas, oportunidades (a melhor), execuções e tokens; custo estimado só com o provedor `claude` (US$ 0,10/0,50 por milhão). O envio automático no sábado às 17:00 vem na Fase 7.
 - **Relatório**: termina com a linha de comandos (`/feito N` com o número da primeira tarefa de A Fazer).
 
+## 18. Agendamento, logs e avisos (Fase 7, 01/11/2026)
+
+- **Serviço**: `python main.py --servico` é o CMD do container (`restart: unless-stopped`): bot + JobQueue do python-telegram-bot (extra `job-queue`, APScheduler). No JobQueue, 0 = domingo (`dias_ptb` converte).
+- **Horários**: análise em `llm.horario_analise` nos dias úteis, com prazo 5 min antes do relatório e até 5 rodadas enquanto chegarem e-mails novos; relatório em `geral.horario_relatorio` com `prazo_limite = agora` (o que sobrou vai pelas regras e aparece o aviso "classificado sem IA"); resumo semanal em `resumo_semanal.dia/horario`.
+- **Trava**: análise e relatório nunca rodam juntos. O relatório espera a análise por até 30 min; depois disso manda um aviso em vez do relatório. A análise não roda se outra rotina estiver em andamento.
+- **Recuperação ao subir**: o que deveria ter rodado hoje e não rodou roda na hora (relatório se passou do horário e não há retrato do dia; análise se está dentro da janela dela; resumo se é o dia, passou do horário e não há execução 'semanal'). O retrato do dia (`snapshots`) marca "relatório enviado", por isso só o `--relatorio` grava retrato.
+- **Avisos**: falha na análise vira aviso no relatório seguinte (nada de mensagem às 05:30); falha no relatório ou no resumo vira mensagem curta no Telegram; falha do próprio Telegram só vai para o log.
+- **Logs**: terminal + `logs/assistente.log` com rotação (1 MB × 6); apscheduler e httpx em WARNING. Sem permissão na pasta, segue só no terminal. Docker com `json-file` limitado a 3 × 10 MB.
+- **Saúde**: batimento em `data/batimento` a cada 5 min; healthcheck do compose falha se tiver mais de 15 min. `/status` no bot mostra as últimas execuções e os próximos horários.
+- **Atenção**: com o serviço no ar, não rode `--bot` em paralelo (dois `getUpdates` com o mesmo token dão conflito). Os outros comandos avulsos podem rodar com `docker compose run`.
+

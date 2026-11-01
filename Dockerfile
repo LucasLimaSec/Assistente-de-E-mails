@@ -19,8 +19,9 @@ COPY prompts/ prompts/
 # Só os e-mails fictícios, usados pelo --benchmark-ia.
 COPY tests/fixtures/ tests/fixtures/
 
-RUN mkdir -p data && chown app:app data
+RUN mkdir -p data logs && chown app:app data logs
 USER app
 
-# Por enquanto só a verificação. Na Fase 6 passa a rodar o bot permanente.
-CMD ["python", "main.py", "--check"]
+# Serviço permanente: bot + análise, relatório e resumo nos horários do config.yaml.
+# Comandos avulsos: docker compose run --rm assistente-email python main.py --check
+CMD ["python", "main.py", "--servico"]

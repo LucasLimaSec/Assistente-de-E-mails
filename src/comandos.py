@@ -22,6 +22,7 @@ AJUDA = """<b>Comandos</b>
 /nova texto – cria uma tarefa (/nova ! texto = prioridade alta)
 /rascunho N – rascunho de resposta da tarefa N (/rascunho N novo gera outro)
 /semana – resumo da semana até agora
+/status – últimas execuções e próximos horários (no modo serviço)
 
 Qualquer outra mensagem de texto vira uma nota do dia e aparece em "Feito" no próximo relatório."""
 
@@ -143,3 +144,29 @@ def gerar_rascunho(conn: sqlite3.Connection, cfg: dict, n: int, agora: datetime,
 def formatar_rascunho(n: int, titulo: str, texto: str, guardado: bool = False) -> str:
     rodape = "\n\n<i>Guardado de antes. Para gerar outro: /rascunho {n} novo</i>".format(n=n) if guardado else ""
     return f"✍️ <b>Rascunho para #{n}</b> ({escape(titulo)}):\n\n{escape(texto)}{rodape}"
+
+
+# --- status do serviço --------------------------------------------------------------------------
+
+DIAS_ABREV = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
+
+
+def status(conn: sqlite3.Connection, proximos: list[tuple[str, datetime]], agora: datetime) -> str:
+    linhas = ["🩺 <b>Status</b>"]
+    execucoes = conn.execute("SELECT tipo, iniciada_em, status, tokens_entrada, tokens_saida, erro FROM execucoes "
+                             "ORDER BY id DESC LIMIT 5").fetchall()
+    if execucoes:
+        linhas.append("\n<b>Últimas execuções</b>")
+        for e in execucoes:
+            quando = datetime.fromisoformat(e["iniciada_em"]).astimezone(agora.tzinfo)
+            marca = {"ok": "✅", "falha": "❌"}.get(e["status"], "⏳")
+            detalhe = f" · erro: {escape(e['erro'][:80])}" if e["erro"] else ""
+            linhas.append(f"{marca} {DIAS_ABREV[quando.weekday()]} {quando:%d/%m %H:%M} {e['tipo']} · tokens "
+                          f"{e['tokens_entrada']}/{e['tokens_saida']}{detalhe}")
+    ultimo = conn.execute("SELECT MAX(data) FROM snapshots").fetchone()[0]
+    linhas.append(f"\nÚltimo relatório enviado: {ultimo or 'nenhum ainda'}")
+    if proximos:
+        linhas.append("\n<b>Próximos horários</b>")
+        for nome, quando in proximos:
+            linhas.append(f"• {DIAS_ABREV[quando.weekday()]} {quando:%d/%m %H:%M} {escape(nome)}")
+    return "\n".join(linhas)

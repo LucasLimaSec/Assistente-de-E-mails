@@ -72,8 +72,12 @@ async def _responder(update, texto: str) -> None:
             parte, parse_mode=ParseMode.HTML, link_preview_options=telegram.LinkPreviewOptions(is_disabled=True))
 
 
-def montar_aplicacao(cfg: dict):
-    """Application com os comandos, aceitando mensagens só do TELEGRAM_CHAT_ID."""
+def montar_aplicacao(cfg: dict, extras: list[tuple[str, str, object]] | None = None):
+    """Application com os comandos, aceitando mensagens só do TELEGRAM_CHAT_ID.
+
+    `extras`: comandos a mais (nome, descrição para o menu, handler), como o /status do serviço.
+    """
+    extras = extras or []
     from telegram import BotCommand
     from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
@@ -131,6 +135,7 @@ def montar_aplicacao(cfg: dict):
             BotCommand("nova", "cria uma tarefa"),
             BotCommand("rascunho", "rascunho de resposta da tarefa N"),
             BotCommand("semana", "resumo da semana"),
+            *(BotCommand(nome, descricao) for nome, descricao, _ in extras),
             BotCommand("ajuda", "lista os comandos"),
         ])
 
@@ -144,6 +149,8 @@ def montar_aplicacao(cfg: dict):
     app.add_handler(CommandHandler("quadro", quadro, filters=so_meu_chat))
     app.add_handler(CommandHandler("semana", semana, filters=so_meu_chat))
     app.add_handler(CommandHandler("rascunho", rascunho, filters=so_meu_chat))
+    for nome, _, handler in extras:
+        app.add_handler(CommandHandler(nome, handler, filters=so_meu_chat))
     app.add_handler(MessageHandler(so_meu_chat & filters.COMMAND, desconhecido))
     # Texto livre vira nota. Mensagens de outros chats não casam com nenhum handler e são ignoradas.
     app.add_handler(MessageHandler(so_meu_chat & filters.TEXT & ~filters.COMMAND, nota))

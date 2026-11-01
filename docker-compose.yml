@@ -8,10 +8,24 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./prompts:/app/prompts:ro
       - ./data:/app/data
+      - ./logs:/app/logs
     depends_on:
       - ollama
-    # Por enquanto roda um comando e encerra. Vira "unless-stopped" quando o bot entrar (Fase 6).
-    restart: "no"
+    # Fica no ar: bot + horários (análise 05:30, relatório 08:00, resumo sábado 17:00).
+    restart: unless-stopped
+    stop_grace_period: 30s
+    # Saudável enquanto o batimento (gravado a cada 5 min pelo serviço) tiver menos de 15 min.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(time.time() - os.path.getmtime('/app/data/batimento') > 900)"]
+      interval: 5m
+      timeout: 10s
+      start_period: 2m
+      retries: 2
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # IA local. Sem "ports": só os containers deste compose falam com ela.
   ollama:

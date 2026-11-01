@@ -188,7 +188,7 @@ O relatório traz o resumo no topo, o que foi feito desde o último relatório, 
 ### 9. Conversar com o bot
 
 ```bash
-# Deixa o bot no ar (Ctrl+C para parar; na Fase 7 ele roda sozinho no container)
+# Só o bot, sem os horários (para testes; pare o serviço antes: dois bots com o mesmo token entram em conflito)
 docker compose run --rm assistente-email python main.py --bot
 
 # Resumo da semana (sábado às 17:00 a partir da Fase 7)
@@ -208,6 +208,30 @@ docker compose run --rm assistente-email python main.py --resumo-semanal --dry-r
 O bot responde só ao `TELEGRAM_CHAT_ID`; mensagens de qualquer outro chat são ignoradas. Para o `/rascunho`, o e-mail é relido da caixa de entrada na hora (o corpo nunca fica salvo no banco).
 
 O relatório também mostra a **Google Agenda** (`agenda.enabled: true` e `GOOGLE_AGENDA_ICAL_URL` no `.env`): os eventos desde o último relatório entram em "Feito" e os de hoje em "Agenda de hoje".
+
+### 10. Deixar rodando sozinho
+
+```bash
+mkdir -p logs            # como seu usuário, para o container (UID 1000) conseguir escrever
+docker compose up -d     # sobe o Ollama e o serviço; reinicia sozinho se o servidor reiniciar
+docker compose ps        # o assistente-email deve ficar "healthy" em até ~2 min
+```
+
+O serviço (`python main.py --servico`, o comando padrão do container) deixa o bot no ar e roda nos horários do `config.yaml`:
+
+| Horário | O quê |
+| --- | --- |
+| `llm.horario_analise` (05:30), dias úteis | Analisa os e-mails com a IA até 5 min antes do relatório; e-mails que chegam no meio entram numa rodada extra |
+| `geral.horario_relatorio` (08:00), dias úteis | Envia o relatório; o que chegou depois da análise vai pelas regras, para não atrasar |
+| `resumo_semanal` (sábado 17:00) | Envia o resumo da semana |
+
+- **Reinício**: se o container subir depois de um horário perdido (ex.: queda de luz), o que ficou para trás hoje roda na hora.
+- **Falhas**: a falha da análise vira aviso no relatório; a falha do relatório vira uma mensagem curta no Telegram. O bot nunca fica em silêncio.
+- **Logs**: `logs/assistente.log` (1 MB × 6 arquivos) e `docker compose logs assistente-email`. Nenhum conteúdo de e-mail vai para o log.
+- **Saúde**: o serviço grava um batimento a cada 5 min; o healthcheck do container fica "unhealthy" se ele parar.
+- **No Telegram**: `/status` mostra as últimas execuções e os próximos horários.
+
+Depois de mudar o `config.yaml`, rode `docker compose restart assistente-email`. Depois de um `git pull`, rode `docker compose up -d --build`.
 
 ## Configuração
 
@@ -250,6 +274,7 @@ O plano completo, as decisões e as convenções do projeto estão no [`CLAUDE.m
 ├── docker-compose.yml
 ├── src/
 │   ├── agenda.py        # Google Agenda pelo endereço iCal
+│   ├── agendador.py     # serviço: bot + horários, recuperação e healthcheck
 │   ├── ai_analyzer.py   # lotes, novas tentativas, reserva e regras do config sobre a IA
 │   ├── benchmark.py     # --benchmark-ia
 │   ├── comandos.py      # comandos do bot (/feito, /nova, /rascunho...)
@@ -260,7 +285,9 @@ O plano completo, as decisões e as convenções do projeto estão no [`CLAUDE.m
 │   ├── kanban.py        # regras do quadro: mover, deduplicar, atraso, retrato do dia
 │   ├── report.py        # monta a mensagem do relatório (HTML do Telegram)
 │   ├── resumo.py        # resumo semanal
+│   ├── rotinas.py       # análise da madrugada, relatório e resumo
 │   ├── llm/             # provedores de IA: regras, ollama e claude
+│   ├── logs.py          # log em arquivo com rotação
 │   ├── storage.py       # schema e conexão SQLite
 │   ├── telegram_bot.py  # envio e bot de comandos
 │   └── verificacao.py   # testes de chaves e conexões
@@ -283,8 +310,8 @@ O plano completo, as decisões e as convenções do projeto estão no [`CLAUDE.m
 - [x] **Fase 2 – E-mail**: coleta e filtros
 - [x] **Fase 3 – IA**: provedores `ollama`, `regras` e `claude`, benchmark no servidor e registro de tokens
 - [x] **Fase 4 – Kanban**: mover, deduplicar e marcar atraso
-- [ ] **Fase 5 – Telegram (envio)**: relatório diário
-- [ ] **Fase 6 – Telegram (comandos)**: `/feito`, `/nova`, `/quadro`, `/rascunho`, notas, agenda e resumo semanal
+- [x] **Fase 5 – Telegram (envio)**: relatório diário
+- [x] **Fase 6 – Telegram (comandos)**: `/feito`, `/nova`, `/quadro`, `/rascunho`, notas, agenda e resumo semanal
 - [ ] **Fase 7 – Agendamento**: execução automática, logs e aviso de falha
 - [ ] **Fase 8 – Extras**: IA no PC de mesa e resumo em áudio
 

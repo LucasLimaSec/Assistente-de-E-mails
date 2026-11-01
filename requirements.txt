@@ -1,5 +1,5 @@
 anthropic>=2.3,<3
-python-telegram-bot>=22.8,<23
+python-telegram-bot[job-queue]>=22.8,<23
 PyYAML>=6.0.3,<7
 python-dotenv>=1.2,<2
 tzdata>=2025.2
